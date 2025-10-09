@@ -206,10 +206,11 @@
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-full overflow-y-auto no-scrollbar">
             <div class="p-6">
                 <div class="flex justify-between items-center mb-4 border-b pb-3">
-                    <h3 class="text-xl font-semibold text-gray-800">新增社區</h3>
+                    <h3 id="community-modal-title" class="text-xl font-semibold text-gray-800">新增社區</h3>
                     <button id="close-add-community-modal-button" class="text-gray-400 hover:text-gray-800 text-3xl font-light">&times;</button>
                 </div>
                 <form id="add-community-form" class="space-y-4">
+                    <input type="hidden" id="editing-community-id">
                     <div>
                         <label class="text-sm font-medium text-gray-700">社區名稱</label>
                         <input id="new-community-name-input" type="text" required class="mt-1 block w-full input">
@@ -231,7 +232,7 @@
                         <button type="button" id="add-schedule-button" class="mt-3 text-sm text-red-600 hover:text-red-800 font-medium">+ 新增排班</button>
                     </div>
                     <p id="add-community-error" class="text-red-500 text-sm text-center h-5"></p>
-                    <button type="submit" class="w-full button-primary">儲存社區</button>
+                    <button type="submit" id="save-community-button" class="w-full button-primary">儲存社區</button>
                 </form>
             </div>
         </div>
@@ -240,10 +241,11 @@
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-full overflow-y-auto no-scrollbar">
             <div class="p-6">
                 <div class="flex justify-between items-center mb-4 border-b pb-3">
-                    <h3 class="text-xl font-semibold text-gray-800">新增帳號</h3>
+                    <h3 id="user-modal-title" class="text-xl font-semibold text-gray-800">新增帳號</h3>
                     <button id="close-add-user-modal-button" class="text-gray-400 hover:text-gray-800 text-3xl font-light">&times;</button>
                 </div>
                 <form id="add-user-form" class="space-y-4">
+                    <input type="hidden" id="editing-user-id">
                     <div>
                         <label for="user-name-input" class="text-sm font-medium text-gray-700">姓名</label>
                         <input id="user-name-input" type="text" required class="mt-1 block w-full input">
@@ -254,7 +256,7 @@
                     </div>
                     <div>
                         <label for="user-password-input" class="text-sm font-medium text-gray-700">密碼</label>
-                        <input id="user-password-input" type="password" required class="mt-1 block w-full input">
+                        <input id="user-password-input" type="password" placeholder="新增時必填，編輯時留空則不變更" class="mt-1 block w-full input">
                     </div>
                      <div>
                         <label for="user-title-input" class="text-sm font-medium text-gray-700">職稱</label>
@@ -277,7 +279,7 @@
                     </div>
                     <p id="add-user-error" class="text-red-500 text-sm text-center h-5"></p>
                     <button type="submit" id="add-user-button" class="w-full button-primary">
-                        <span>建立帳號</span>
+                        <span id="user-form-button-text">建立帳號</span>
                         <div id="add-user-loader" class="loader ml-3 hidden"></div>
                     </button>
                 </form>
@@ -303,7 +305,7 @@
         // 匯入 Firebase 模組
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, onSnapshot, addDoc, query, where, orderBy, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, onSnapshot, addDoc, query, where, orderBy, serverTimestamp, setDoc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
         // --- Firebase 設定 ---
@@ -488,6 +490,9 @@
         const scheduleContainer = document.getElementById('schedule-container');
         const addCommunityError = document.getElementById('add-community-error');
         const communityList = document.getElementById('community-list');
+        const communityModalTitle = document.getElementById('community-modal-title');
+        const saveCommunityButton = document.getElementById('save-community-button');
+        const editingCommunityIdInput = document.getElementById('editing-community-id');
 
         function hideAddCommunityModal() {
             addCommunityModal.classList.add('hidden');
@@ -498,43 +503,43 @@
             communityMarker = null;
         };
 
-        function addPatrolPointInput() {
-             const pointId = Date.now();
+        function addPatrolPointInput(point = {}) {
              const newPointDiv = document.createElement('div');
              newPointDiv.className = 'grid grid-cols-1 md:grid-cols-4 gap-2 items-center';
              newPointDiv.innerHTML = `
-                <input type="text" placeholder="編號" class="patrol-point-id input text-sm p-2" required>
-                <input type="text" placeholder="巡邏點名稱" class="patrol-point-name input text-sm p-2" required>
-                <input type="text" placeholder="說明" class="patrol-point-desc input text-sm p-2 flex-grow">
+                <input type="text" placeholder="編號" class="patrol-point-id input text-sm p-2" value="${point.id || ''}" required>
+                <input type="text" placeholder="巡邏點名稱" class="patrol-point-name input text-sm p-2" value="${point.name || ''}" required>
+                <input type="text" placeholder="說明" class="patrol-point-desc input text-sm p-2 flex-grow" value="${point.description || ''}">
                 <div class="flex items-center gap-1">
-                    <input type="hidden" class="patrol-point-lat">
-                    <input type="hidden" class="patrol-point-lng">
-                    <button type="button" class="set-location-btn p-1 bg-gray-200 rounded text-xs w-full">在地圖上標記</button>
+                    <input type="hidden" class="patrol-point-lat" value="${point.lat || ''}">
+                    <input type="hidden" class="patrol-point-lng" value="${point.lng || ''}">
+                    <button type="button" class="set-location-btn p-1 ${point.lat ? 'bg-green-200' : 'bg-gray-200'} rounded text-xs w-full">${point.lat ? '已設定' : '在地圖上標記'}</button>
                     <button type="button" class="remove-btn text-red-500 hover:text-red-700 p-1">&times;</button>
                 </div>
             `;
             patrolPointsContainer.appendChild(newPointDiv);
             newPointDiv.querySelector('.remove-btn').onclick = () => newPointDiv.remove();
-            newPointDiv.querySelector('.set-location-btn').onclick = () => {
+            newPointDiv.querySelector('.set-location-btn').onclick = (e) => {
+                const btn = e.target;
                 alert("請點擊地圖以設定此巡邏點的位置。");
-                communitySetupMap.once('click', (e) => {
-                    const { lat, lng } = e.latlng;
+                communitySetupMap.once('click', (ev) => {
+                    const { lat, lng } = ev.latlng;
                     newPointDiv.querySelector('.patrol-point-lat').value = lat;
                     newPointDiv.querySelector('.patrol-point-lng').value = lng;
-                    newPointDiv.querySelector('.set-location-btn').textContent = "已設定";
-                    newPointDiv.querySelector('.set-location-btn').classList.add('bg-green-200');
+                    btn.textContent = "已設定";
+                    btn.classList.add('bg-green-200');
                 });
             };
         };
         
-        function addScheduleInput() {
+        function addScheduleInput(schedule = {}) {
             const newScheduleDiv = document.createElement('div');
             newScheduleDiv.className = 'grid grid-cols-1 md:grid-cols-2 gap-2 items-center';
             newScheduleDiv.innerHTML = `
-                <input type="time" class="schedule-time input text-sm p-2" required>
+                <input type="time" class="schedule-time input text-sm p-2" value="${schedule.time || ''}" required>
                 <div class="flex items-center gap-1">
                     <select class="schedule-user input bg-white text-sm p-2 flex-grow">
-                        ${allUsers.map(u => `<option value="${u.id}">${u.name}</option>`).join('')}
+                        ${allUsers.map(u => `<option value="${u.id}" ${schedule.userId === u.id ? 'selected' : ''}>${u.name}</option>`).join('')}
                     </select>
                     <button type="button" class="remove-btn text-red-500 hover:text-red-700 p-1">&times;</button>
                 </div>
@@ -544,6 +549,9 @@
         };
 
         showAddCommunityModalButton.addEventListener('click', () => {
+            editingCommunityIdInput.value = '';
+            communityModalTitle.textContent = '新增社區';
+            saveCommunityButton.textContent = '儲存社區';
             addCommunityModal.classList.remove('hidden');
             setTimeout(() => {
                 communitySetupMap = L.map(communityMapContainer).setView([25.0330, 121.5654], 13);
@@ -561,45 +569,89 @@
         });
         
         closeAddCommunityModalButton.addEventListener('click', hideAddCommunityModal);
-        addPatrolPointButton.addEventListener('click', addPatrolPointInput);
-        addScheduleButton.addEventListener('click', addScheduleInput);
+        addPatrolPointButton.addEventListener('click', () => addPatrolPointInput());
+        addScheduleButton.addEventListener('click', () => addScheduleInput());
 
         addCommunityForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             addCommunityError.textContent = '';
-            const communityName = document.getElementById('new-community-name-input').value.trim();
-            const lat = document.getElementById('community-lat-input').value;
-            const lng = document.getElementById('community-lng-input').value;
-            if (!communityName || !lat || !lng) {
-                addCommunityError.textContent = '請輸入社區名稱並在地圖上標記位置。';
-                return;
-            }
+            saveCommunityButton.disabled = true;
 
-            const patrolPoints = Array.from(patrolPointsContainer.querySelectorAll('.grid')).map(row => ({
-                id: row.querySelector('.patrol-point-id').value.trim(),
-                name: row.querySelector('.patrol-point-name').value.trim(),
-                description: row.querySelector('.patrol-point-desc').value.trim(),
-                lat: parseFloat(row.querySelector('.patrol-point-lat').value),
-                lng: parseFloat(row.querySelector('.patrol-point-lng').value),
-            })).filter(p => p.id && p.name && p.lat && p.lng);
-
-            const schedules = Array.from(scheduleContainer.querySelectorAll('.grid')).map(row => ({
-                time: row.querySelector('.schedule-time').value,
-                userId: row.querySelector('.schedule-user').value,
-            })).filter(s => s.time && s.userId);
-
+            const communityData = {
+                name: document.getElementById('new-community-name-input').value.trim(),
+                location: {
+                    lat: parseFloat(document.getElementById('community-lat-input').value),
+                    lng: parseFloat(document.getElementById('community-lng-input').value)
+                },
+                patrolPoints: Array.from(patrolPointsContainer.querySelectorAll('.grid')).map(row => ({
+                    id: row.querySelector('.patrol-point-id').value.trim(),
+                    name: row.querySelector('.patrol-point-name').value.trim(),
+                    description: row.querySelector('.patrol-point-desc').value.trim(),
+                    lat: parseFloat(row.querySelector('.patrol-point-lat').value),
+                    lng: parseFloat(row.querySelector('.patrol-point-lng').value),
+                })).filter(p => p.id && p.name && p.lat && p.lng),
+                schedules: Array.from(scheduleContainer.querySelectorAll('.grid')).map(row => ({
+                    time: row.querySelector('.schedule-time').value,
+                    userId: row.querySelector('.schedule-user').value,
+                })).filter(s => s.time && s.userId)
+            };
+            
             try {
-                await addDoc(collection(db, "communities"), { 
-                    name: communityName,
-                    location: { lat: parseFloat(lat), lng: parseFloat(lng) },
-                    patrolPoints: patrolPoints,
-                    schedules: schedules
-                });
+                if (editingCommunityIdInput.value) {
+                    await updateDoc(doc(db, "communities", editingCommunityIdInput.value), communityData);
+                } else {
+                    await addDoc(collection(db, "communities"), communityData);
+                }
                 hideAddCommunityModal();
             } catch (error) {
                 addCommunityError.textContent = '儲存失敗，請稍後再試。';
+                console.error("Community save error:", error);
+            } finally {
+                saveCommunityButton.disabled = false;
             }
         });
+
+        async function editCommunity(communityId) {
+            const docSnap = await getDoc(doc(db, "communities", communityId));
+            if (!docSnap.exists()) return;
+            const community = docSnap.data();
+
+            editingCommunityIdInput.value = communityId;
+            communityModalTitle.textContent = '編輯社區';
+            saveCommunityButton.textContent = '更新社區';
+
+            document.getElementById('new-community-name-input').value = community.name;
+            document.getElementById('community-lat-input').value = community.location.lat;
+            document.getElementById('community-lng-input').value = community.location.lng;
+
+            addCommunityModal.classList.remove('hidden');
+            setTimeout(() => {
+                communitySetupMap = L.map(communityMapContainer).setView([community.location.lat, community.location.lng], 16);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(communitySetupMap);
+                communityMarker = L.marker([community.location.lat, community.location.lng]).addTo(communitySetupMap);
+                communitySetupMap.on('click', (e) => {
+                    const { lat, lng } = e.latlng;
+                    document.getElementById('community-lat-input').value = lat;
+                    document.getElementById('community-lng-input').value = lng;
+                    communityMarker.setLatLng(e.latlng);
+                });
+            }, 100);
+
+            patrolPointsContainer.innerHTML = '';
+            community.patrolPoints.forEach(addPatrolPointInput);
+            scheduleContainer.innerHTML = '';
+            community.schedules.forEach(addScheduleInput);
+        }
+
+        async function deleteCommunity(communityId, communityName) {
+            if (confirm(`確定要刪除社區 "${communityName}" 嗎？此操作無法復原。`)) {
+                try {
+                    await deleteDoc(doc(db, "communities", communityId));
+                } catch (error) {
+                    alert("刪除失敗，請稍後再試。");
+                }
+            }
+        }
 
         // --- 設定頁面: 帳號管理 ---
         const showAddUserModalButton = document.getElementById('show-add-user-modal-button');
@@ -610,13 +662,24 @@
         const addUserLoader = document.getElementById('add-user-loader');
         const userCommunitiesChecklist = document.getElementById('user-communities-checklist');
         const userList = document.getElementById('user-list');
+        const userModalTitle = document.getElementById('user-modal-title');
+        const userFormButtonText = document.getElementById('user-form-button-text');
+        const editingUserIdInput = document.getElementById('editing-user-id');
+        const userPasswordInput = document.getElementById('user-password-input');
 
         function hideAddUserModal() {
             addUserModal.classList.add('hidden');
             addUserForm.reset();
             addUserError.textContent = '';
         };
-        showAddUserModalButton.addEventListener('click', () => addUserModal.classList.remove('hidden'));
+        showAddUserModalButton.addEventListener('click', () => {
+            editingUserIdInput.value = '';
+            userModalTitle.textContent = '新增帳號';
+            userFormButtonText.textContent = '建立帳號';
+            userPasswordInput.required = true;
+            document.getElementById('user-email-input').disabled = false;
+            addUserModal.classList.remove('hidden');
+        });
         closeAddUserModalButton.addEventListener('click', hideAddUserModal);
         
         addUserForm.addEventListener('submit', async (e) => {
@@ -625,31 +688,79 @@
             addUserButton.disabled = true;
             addUserLoader.classList.remove('hidden');
 
-            const selectedCommunities = Array.from(userCommunitiesChecklist.querySelectorAll('input:checked')).map(cb => cb.value);
+            const isEditing = !!editingUserIdInput.value;
+            const password = userPasswordInput.value;
+            if (!isEditing && !password) {
+                addUserError.textContent = '新增帳號時必須設定密碼。';
+                addUserButton.disabled = false;
+                addUserLoader.classList.add('hidden');
+                return;
+            }
+
             const userData = {
                 name: document.getElementById('user-name-input').value,
                 email: document.getElementById('user-email-input').value,
-                password: document.getElementById('user-password-input').value,
                 role: document.getElementById('user-role-select').value,
                 title: document.getElementById('user-title-input').value,
-                communities: selectedCommunities,
+                communities: Array.from(userCommunitiesChecklist.querySelectorAll('input:checked')).map(cb => cb.value),
             };
+            if(password) userData.password = password;
 
             try {
-                const createUser = httpsCallable(functions, 'createUser');
-                const result = await createUser(userData);
-                if (result.data.success) {
-                    hideAddUserModal();
+                if (isEditing) {
+                    userData.uid = editingUserIdInput.value;
+                    const updateUser = httpsCallable(functions, 'updateUser');
+                    await updateUser(userData);
                 } else {
-                    throw new Error(result.data.error || '未知錯誤');
+                    const createUser = httpsCallable(functions, 'createUser');
+                    await createUser(userData);
                 }
+                hideAddUserModal();
             } catch (error) {
-                addUserError.textContent = error.message || "建立帳號失敗";
+                addUserError.textContent = error.message || (isEditing ? "更新失敗" : "建立失敗");
             } finally {
                 addUserButton.disabled = false;
                 addUserLoader.classList.add('hidden');
             }
         });
+        
+        function editUser(userId) {
+            const user = allUsers.find(u => u.id === userId);
+            if (!user) return;
+
+            editingUserIdInput.value = userId;
+            userModalTitle.textContent = '編輯帳號';
+            userFormButtonText.textContent = '更新帳號';
+            userPasswordInput.required = false;
+
+            document.getElementById('user-name-input').value = user.name;
+            document.getElementById('user-email-input').value = user.email;
+            document.getElementById('user-email-input').disabled = true; // Cannot change email for simplicity
+            document.getElementById('user-title-input').value = user.title;
+            document.getElementById('user-role-select').value = user.role;
+            
+            userCommunitiesChecklist.querySelectorAll('input').forEach(cb => {
+                cb.checked = user.communities.includes(cb.value);
+            });
+
+            addUserModal.classList.remove('hidden');
+        }
+
+        async function deleteUser(userId, userName) {
+            if (userId === currentUserProfile.id) {
+                alert("無法刪除自己的帳號。");
+                return;
+            }
+            if (confirm(`確定要刪除帳號 "${userName}" 嗎？此操作將永久移除該使用者。`)) {
+                try {
+                    const deleteUserFunc = httpsCallable(functions, 'deleteUser');
+                    await deleteUserFunc({ uid: userId });
+                } catch (error) {
+                    alert("刪除失敗：" + error.message);
+                }
+            }
+        }
+
 
         function loadCommunitiesForAdmin() {
             const q = query(collection(db, "communities"), orderBy("name"));
@@ -661,8 +772,16 @@
                     const community = { id: doc.id, ...doc.data() };
                     const item = document.createElement('div');
                     item.className = 'list-item flex justify-between items-center p-2 bg-gray-100 rounded';
-                    item.innerHTML = `<span>${community.name} <span class="text-xs text-gray-500">(${community.patrolPoints?.length || 0}個點)</span></span>`;
+                    item.innerHTML = `
+                        <span>${community.name} <span class="text-xs text-gray-500">(${community.patrolPoints?.length || 0}個點)</span></span>
+                        <div class="space-x-2">
+                            <button class="edit-community-btn text-blue-500 text-xs font-medium">編輯</button>
+                            <button class="delete-community-btn text-red-500 text-xs font-medium">刪除</button>
+                        </div>
+                    `;
                     communityListEl.appendChild(item);
+                    item.querySelector('.edit-community-btn').onclick = () => editCommunity(community.id);
+                    item.querySelector('.delete-community-btn').onclick = () => deleteCommunity(community.id, community.name);
                     
                     const checkItem = document.createElement('div');
                     checkItem.className = 'flex items-center';
@@ -680,9 +799,20 @@
                     const user = { id: doc.id, ...doc.data() };
                     allUsers.push(user);
                     const item = document.createElement('div');
-                    item.className = 'list-item p-2 bg-gray-100 rounded';
-                    item.innerHTML = `<p class="font-semibold">${user.name} (${user.role})</p><p class="text-sm text-gray-600">${user.email}</p>`;
+                    item.className = 'list-item flex justify-between items-center p-2 bg-gray-100 rounded';
+                    item.innerHTML = `
+                        <div>
+                            <p class="font-semibold">${user.name} (${user.role})</p>
+                            <p class="text-sm text-gray-600">${user.email}</p>
+                        </div>
+                        <div class="space-x-2">
+                            <button class="edit-user-btn text-blue-500 text-xs font-medium">編輯</button>
+                            <button class="delete-user-btn text-red-500 text-xs font-medium">刪除</button>
+                        </div>
+                    `;
                     userList.appendChild(item);
+                    item.querySelector('.edit-user-btn').onclick = () => editUser(user.id);
+                    item.querySelector('.delete-user-btn').onclick = () => deleteUser(user.id, user.name);
                 });
             });
         }
@@ -899,7 +1029,31 @@
 
         // --- Data Page ---
         function loadDataLogs() {
-            // Logic for data page (unchanged)
+            const dataLogContainer = document.getElementById('data-log-container');
+            let q;
+            const userCommunities = currentUserProfile.communities || [];
+            if (currentUserProfile.role === '管理員') {
+                q = query(collection(db, "logs"), orderBy("timestamp", "desc"));
+            } else if (userCommunities.length > 0) {
+                 q = query(collection(db, "logs"), where("communityId", "in", userCommunities), orderBy("timestamp", "desc"));
+            } else {
+                q = null;
+            }
+
+            if (!q) {
+                dataLogContainer.innerHTML = '<p class="text-center text-gray-500 py-4">您尚未被指派任何社區</p>';
+                return;
+            }
+            onSnapshot(q, (snapshot) => {
+                dataLogContainer.innerHTML = snapshot.empty ? '<p class="text-center text-gray-500 py-4">沒有任何歷史紀錄</p>' : '';
+                snapshot.forEach(doc => {
+                    const log = doc.data();
+                    const item = document.createElement('div');
+                    item.className = 'log-item bg-white p-3 rounded-lg shadow-sm';
+                    item.innerHTML = `<div><p class="font-semibold">${log.location}</p><p class="text-sm text-gray-500">${log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('zh-TW') : '時間待確認'}</p><p class="text-xs text-gray-400">by ${log.userName}</p></div>`;
+                    dataLogContainer.appendChild(item);
+                });
+            });
         }
 
         // --- Clock ---
