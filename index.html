@@ -129,7 +129,7 @@
 
                 <div id="patrol-schedule-selection" class="w-full space-y-3 hidden"></div>
 
-                <div id="patrol-main-view" class="w-full h-full flex-grow flex flex-col hidden">
+                <div id="patrol-main-view" class="flex-grow flex flex-col hidden">
                     <button id="back-to-schedule-btn" class="text-sm text-red-600 hover:text-red-800 font-medium mb-2 flex-shrink-0">&lt; 返回班次選擇</button>
                     <div class="flex border-b mb-2 flex-shrink-0">
                         <button data-tab="map" class="patrol-tab-btn flex-1 p-2 text-center font-medium border-b-2 border-red-500 text-red-600">巡邏地圖</button>
@@ -323,7 +323,7 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const functions = getFunctions(app, 'us-central1'); // Specify region
+        const functions = getFunctions(app, 'us-central1'); // 指定區域
         
         // --- 全域狀態變數 ---
         let currentUserProfile = null;
@@ -723,6 +723,7 @@
                 }
                 hideAddUserModal();
             } catch (error) {
+                console.error("Function call failed:", error);
                 addUserError.textContent = error.message || (isEditing ? "更新失敗" : "建立失敗");
             } finally {
                 addUserButton.disabled = false;
