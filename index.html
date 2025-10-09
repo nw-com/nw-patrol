@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>西北保全巡邏打卡系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- LeafletJS for Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <style>
         /* 基本樣式 */
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
@@ -20,6 +23,10 @@
         /* Loading Spinner */
         .loader { border: 4px solid #f3f3f3; border-radius: 50%; border-top: 4px solid #ef4444; width: 24px; height: 24px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Map Styles */
+        .map-container { height: 200px; width: 100%; border-radius: 0.5rem; border: 1px solid #ddd; }
+        #patrol-map { height: 100%; width: 100%; }
+        .leaflet-marker-icon.completed-marker { filter: hue-rotate(90deg) saturate(1.5); } /* Red -> Green */
     </style>
 </head>
 <body class="flex items-center justify-center">
@@ -65,7 +72,7 @@
                 <div class="h-8 w-8 text-red-600">
                     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                 </div>
-                <h1 class="text-xl font-bold text-gray-900">西北保全巡邏打卡系統</h1>
+                <h1 id="header-title" class="text-xl font-bold text-gray-900">西北保全巡邏打卡系統</h1>
             </div>
             <div class="flex items-center gap-4">
                 <div class="text-sm text-gray-700 whitespace-nowrap">歡迎, <span id="user-name-display" class="font-semibold"></span>!</div>
@@ -87,35 +94,23 @@
             </div>
 
             <!-- 巡邏頁內容 -->
-            <div id="page-patrol" class="hidden">
-                 <!-- 狀態顯示卡 -->
-                <div id="status-card" class="bg-white rounded-lg shadow-lg p-6 mb-6 text-center transition-all duration-300">
-                    <div id="icon-container" class="mx-auto bg-gray-200 rounded-full w-16 h-16 flex items-center justify-center mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio-tower text-gray-500"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.24 6.24 0 0 1 0 8.8"/><path d="M10.6 7.6a2.49 2.49 0 0 1 0 3.5"/><path d="M19.1 1.9C23 5.8 23 12.2 19.1 16.1"/><path d="M16.2 4.7a6.24 6.24 0 0 0 0 8.8"/><path d="M13.4 7.6a2.49 2.49 0 0 0 0 3.5"/><path d="M12 22V12"/><path d="m9 12 3-10 3 10"/></svg>
+            <div id="page-patrol" class="hidden h-full flex flex-col">
+                <div id="patrol-community-selection" class="w-full space-y-3"></div>
+
+                <div id="patrol-schedule-selection" class="w-full space-y-3 hidden"></div>
+
+                <div id="patrol-main-view" class="w-full h-full flex-col hidden">
+                    <div class="flex border-b mb-2">
+                        <button data-tab="map" class="patrol-tab-btn flex-1 p-2 text-center font-medium border-b-2 border-red-500 text-red-600">巡邏地圖</button>
+                        <button data-tab="log" class="patrol-tab-btn flex-1 p-2 text-center font-medium border-b-2 border-transparent text-gray-500">本次巡邏紀錄</button>
                     </div>
-                    <p id="status-text" class="text-lg font-semibold text-gray-700">點擊按鈕開始掃描</p>
-                    <p id="hint-text" class="text-sm text-gray-500 mt-1">準備就緒後，將手機靠近NFC標籤</p>
-                </div>
-
-                <!-- 操作按鈕 -->
-                <div class="text-center mb-8">
-                    <button id="scan-button" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-300">
-                        開始巡邏掃描
-                    </button>
-                </div>
-
-                <!-- 打卡紀錄 -->
-                <div>
-                    <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b-2 pb-2">本次巡邏紀錄</h2>
-                    <div id="log-container" class="space-y-3">
-                        <p id="no-log-message" class="text-center text-gray-500 py-4">目前沒有任何打卡紀錄</p>
+                    <div id="patrol-map-tab" class="flex-grow h-full w-full">
+                        <div id="patrol-map" class="h-full w-full rounded-md"></div>
+                    </div>
+                    <div id="patrol-log-tab" class="hidden h-full overflow-y-auto">
+                         <div id="log-container" class="space-y-3"></div>
                     </div>
                 </div>
-                 <div class="text-center mt-6">
-                     <button id="clear-button" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-md shadow-md transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-300">
-                        清除本次紀錄
-                    </button>
-                 </div>
             </div>
 
             <!-- 資料頁內容 -->
@@ -132,10 +127,10 @@
                 <div class="mb-8">
                     <h2 class="text-xl font-semibold text-gray-700 mb-4">社區管理</h2>
                     <div class="bg-white p-4 rounded-lg shadow">
-                        <div class="flex gap-2 mb-4">
-                            <input id="community-name-input" type="text" placeholder="輸入新的社區名稱" class="flex-grow border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
-                            <button id="add-community-button" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">新增</button>
-                        </div>
+                         <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-medium text-gray-800">現有社區列表</h3>
+                            <button id="show-add-community-modal-button" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 text-sm font-medium">新增社區</button>
+                         </div>
                         <div id="community-list" class="space-y-2"></div>
                     </div>
                 </div>
@@ -143,52 +138,11 @@
                 <!-- 帳號管理 -->
                 <div>
                     <h2 class="text-xl font-semibold text-gray-700 mb-4">帳號管理</h2>
-                    <!-- 新增帳號表單 -->
-                    <div class="bg-white p-4 rounded-lg shadow mb-6">
-                        <h3 class="text-lg font-medium text-gray-800 mb-4">新增帳號</h3>
-                        <form id="add-user-form" class="space-y-4">
-                            <div>
-                                <label for="user-name-input" class="text-sm font-medium text-gray-700">姓名</label>
-                                <input id="user-name-input" type="text" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
-                            </div>
-                             <div>
-                                <label for="user-email-input" class="text-sm font-medium text-gray-700">帳號 (電子郵件)</label>
-                                <input id="user-email-input" type="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
-                            </div>
-                            <div>
-                                <label for="user-password-input" class="text-sm font-medium text-gray-700">密碼</label>
-                                <input id="user-password-input" type="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
-                            </div>
-                             <div>
-                                <label for="user-title-input" class="text-sm font-medium text-gray-700">職稱</label>
-                                <input id="user-title-input" type="text" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
-                            </div>
-                            <div>
-                                <label for="user-role-select" class="text-sm font-medium text-gray-700">角色</label>
-                                <select id="user-role-select" required class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
-                                    <option>保全</option>
-                                    <option>總幹事</option>
-                                    <option>高階主管</option>
-                                    <option>管理員</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-sm font-medium text-gray-700">服務社區</label>
-                                <div id="user-communities-checklist" class="mt-2 space-y-2 max-h-32 overflow-y-auto border p-2 rounded-md">
-                                    <p class="text-gray-500">正在載入社區列表...</p>
-                                </div>
-                            </div>
-                            <p id="add-user-error" class="text-red-500 text-sm text-center h-5"></p>
-                            <button type="submit" id="add-user-button" class="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
-                                <span>建立帳號</span>
-                                <div id="add-user-loader" class="loader ml-3 hidden"></div>
-                            </button>
-                        </form>
-                    </div>
-
-                    <!-- 帳號列表 -->
                     <div class="bg-white p-4 rounded-lg shadow">
-                         <h3 class="text-lg font-medium text-gray-800 mb-4">現有帳號列表</h3>
+                         <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-medium text-gray-800">現有帳號列表</h3>
+                            <button id="show-add-user-modal-button" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 text-sm font-medium">新增帳號</button>
+                         </div>
                         <div id="user-list" class="space-y-2"></div>
                     </div>
                 </div>
@@ -210,403 +164,57 @@
                 <span>資料</span>
             </button>
             <button data-page="settings" class="nav-btn flex flex-col items-center justify-center rounded-lg transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
                 <span>設定</span>
             </button>
         </footer>
     </div>
+
+    <!-- Modals -->
+    <div id="add-community-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-full overflow-y-auto no-scrollbar">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4 border-b pb-3">
+                    <h3 class="text-xl font-semibold text-gray-800">新增社區</h3>
+                    <button id="close-add-community-modal-button" class="text-gray-400 hover:text-gray-800 text-3xl font-light">&times;</button>
+                </div>
+                <form id="add-community-form" class="space-y-4">
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">社區名稱</label>
+                        <input id="new-community-name-input" type="text" required class="mt-1 block w-full input">
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">社區中心位置 (在地圖上點擊設定)</label>
+                        <div id="community-map-container" class="map-container mt-1"></div>
+                        <input type="hidden" id="community-lat-input">
+                        <input type="hidden" id="community-lng-input">
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">巡邏點</h4>
+                        <div id="patrol-points-container" class="space-y-3"></div>
+                        <button type="button" id="add-patrol-point-button" class="mt-3 text-sm text-red-600 hover:text-red-800 font-medium">+ 新增巡邏點</button>
+                    </div>
+                     <div>
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">固定每日巡邏時間</h4>
+                        <div id="schedule-container" class="space-y-3"></div>
+                        <button type="button" id="add-schedule-button" class="mt-3 text-sm text-red-600 hover:text-red-800 font-medium">+ 新增排班</button>
+                    </div>
+                    <p id="add-community-error" class="text-red-500 text-sm text-center h-5"></p>
+                    <button type="submit" class="w-full flex justify-center items-center py-2 px-4 button-primary">儲存社區</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div id="add-user-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+        <!-- User Modal Content -->
+    </div>
+    <div id="nfc-scan-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+        <!-- NFC Scan Modal Content -->
+    </div>
     
     <!-- Firebase SDKs -->
     <script type="module">
-        // 匯入 Firebase 模組
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, onSnapshot, addDoc, query, where, orderBy, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
-
-        // --- Firebase 設定 ---
-        const firebaseConfig = {
-          apiKey: "AIzaSyBaBL7rKPnqpz8hbfILWq6cDWdZust13xM",
-          authDomain: "nw-patrol.firebaseapp.com",
-          projectId: "nw-patrol",
-          storageBucket: "nw-patrol.appspot.com",
-          messagingSenderId: "157808049159",
-          appId: "1:157808049159:web:6f9128d16cb9919d50bea2",
-          measurementId: "G-44B5L4KH1Q"
-        };
-
-        // 初始化 Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const functions = getFunctions(app); // 初始化 Cloud Functions
-        
-        let currentUserProfile = null;
-
-        // --- 全域元素選擇器 ---
-        const loginPage = document.getElementById('login-page');
-        const appContainer = document.getElementById('app-container');
-        const loginButton = document.getElementById('login-button');
-        const emailInput = document.getElementById('email');
-        const passwordInput = document.getElementById('password');
-        const loginError = document.getElementById('login-error');
-        const logoutButton = document.getElementById('logout-button');
-        const userNameDisplay = document.getElementById('user-name-display');
-        const rememberMeCheckbox = document.getElementById('remember-me');
-        const togglePasswordButton = document.getElementById('toggle-password');
-        const eyeIcon = document.getElementById('eye-icon');
-        const eyeOffIcon = document.getElementById('eye-off-icon');
-        
-        // --- 導覽相關 ---
-        const pageElements = {
-            home: document.getElementById('page-home'),
-            patrol: document.getElementById('page-patrol'),
-            data: document.getElementById('page-data'),
-            settings: document.getElementById('page-settings'),
-        };
-        const navButtons = document.querySelectorAll('.nav-btn');
-        
-        // --- 巡邏頁面元素 ---
-        const scanButton = document.getElementById('scan-button');
-        const clearButton = document.getElementById('clear-button');
-        const statusText = document.getElementById('status-text');
-        const hintText = document.getElementById('hint-text');
-        const logContainer = document.getElementById('log-container');
-        const statusCard = document.getElementById('status-card');
-        const iconContainer = document.getElementById('icon-container');
-
-        // --- 巡邏頁面狀態 ---
-        let sessionLogs = [];
-        let isScanning = false;
-        let abortController;
-        let lastScannedSerial = null;
-        let lastScanTime = 0;
-        const COOLDOWN_PERIOD_MS = 3000;
-        
-        const ICONS = {
-            SCANNING: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scan-line text-red-500 animate-pulse"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>`,
-            SUCCESS: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle-2 text-green-500"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>`,
-            ERROR: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle text-red-500"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>`,
-            IDLE: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio-tower text-gray-500"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.24 6.24 0 0 1 0 8.8"/><path d="M10.6 7.6a2.49 2.49 0 0 1 0 3.5"/><path d="M19.1 1.9C23 5.8 23 12.2 19.1 16.1"/><path d="M16.2 4.7a6.24 6.24 0 0 0 0 8.8"/><path d="M13.4 7.6a2.49 2.49 0 0 0 0 3.5"/><path d="M12 22V12"/><path d="m9 12 3-10 3 10"/></svg>`
-        };
-
-        // --- 監聽認證狀態 ---
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                const userDocRef = doc(db, "users", user.uid);
-                const userDocSnap = await getDoc(userDocRef);
-                if (userDocSnap.exists()) {
-                    currentUserProfile = { uid: user.uid, ...userDocSnap.data() };
-                    userNameDisplay.textContent = currentUserProfile.name || '使用者';
-                    setupUIForUser(currentUserProfile);
-                    loginPage.classList.add('hidden');
-                    appContainer.classList.remove('hidden');
-                    appContainer.classList.add('flex');
-                    showPage('home');
-                } else {
-                    loginError.textContent = '找不到使用者設定檔，請聯繫管理員。';
-                    await signOut(auth);
-                }
-            } else {
-                currentUserProfile = null;
-                loginPage.classList.remove('hidden');
-                appContainer.classList.add('hidden');
-                appContainer.classList.remove('flex');
-            }
-        });
-        
-        // --- 登入/登出邏輯 ---
-        loginButton.addEventListener('click', async () => {
-            const email = emailInput.value;
-            const password = passwordInput.value;
-            loginError.textContent = '';
-            try {
-                await signInWithEmailAndPassword(auth, email, password);
-                if (rememberMeCheckbox.checked) {
-                    localStorage.setItem('rememberedEmail', email);
-                } else {
-                    localStorage.removeItem('rememberedEmail');
-                }
-            } catch (error) {
-                loginError.textContent = '帳號或密碼錯誤。';
-            }
-        });
-        logoutButton.addEventListener('click', () => signOut(auth));
-
-        // --- 登入頁功能 ---
-        togglePasswordButton.addEventListener('click', () => {
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-            eyeIcon.classList.toggle('hidden');
-            eyeOffIcon.classList.toggle('hidden');
-        });
-
-        // --- UI 設定 ---
-        function setupUIForUser(profile) {
-            const roles = {
-                '管理員': ['home', 'patrol', 'data', 'settings'],
-                '高階主管': ['home', 'patrol', 'data'],
-                '總幹事': ['home', 'patrol', 'data'],
-                '保全': ['home', 'patrol', 'data']
-            };
-            const allowedPages = roles[profile.role] || [];
-            navButtons.forEach(btn => btn.classList.toggle('hidden', !allowedPages.includes(btn.dataset.page)));
-            const visibleButtons = allowedPages.length;
-            document.querySelector('footer').className = `flex-shrink-0 grid grid-cols-${visibleButtons} gap-2 p-2`;
-        }
-
-        // --- 導覽邏輯 ---
-        function showPage(pageName) {
-            Object.values(pageElements).forEach(page => page.classList.add('hidden'));
-            if (pageElements[pageName]) pageElements[pageName].classList.remove('hidden');
-
-            navButtons.forEach(btn => btn.classList.toggle('nav-btn-active', btn.dataset.page === pageName));
-            
-            if (pageName !== 'patrol' && isScanning) abortController.abort();
-            
-            if (pageName === 'settings' && currentUserProfile.role === '管理員') {
-                loadCommunities();
-                loadUsers();
-            }
-            if (pageName === 'data') loadDataLogs();
-        }
-        navButtons.forEach(btn => btn.addEventListener('click', () => showPage(btn.dataset.page)));
-        
-        // --- 巡邏頁邏輯 ---
-        function updateStatus(state, message, hint = '') {
-            statusText.textContent = message;
-            hintText.textContent = hint;
-            iconContainer.innerHTML = ICONS[state];
-            statusCard.className = 'bg-white rounded-lg shadow-lg p-6 mb-6 text-center transition-all duration-300'; // Reset
-            const stateClasses = {
-                SCANNING: 'bg-red-100', SUCCESS: 'bg-green-100', ERROR: 'bg-red-100'
-            };
-            if(stateClasses[state]) statusCard.classList.add(stateClasses[state]);
-        }
-        
-        function renderSessionLog() {
-            logContainer.innerHTML = '';
-            if (sessionLogs.length === 0) {
-                logContainer.innerHTML = '<p id="no-log-message" class="text-center text-gray-500 py-4">目前沒有任何打卡紀錄</p>';
-            } else {
-                [...sessionLogs].reverse().forEach(entry => {
-                    const logElement = document.createElement('div');
-                    logElement.className = 'log-item bg-white p-3 rounded shadow-sm';
-                    logElement.innerHTML = `<div><p class="font-semibold">${entry.location}</p><p class="text-sm text-gray-500">${entry.timestamp}</p></div>`;
-                    logContainer.appendChild(logElement);
-                });
-            }
-        }
-        
-        async function toggleScan() {
-            if (isScanning) {
-                if(abortController) abortController.abort();
-                return;
-            }
-            if (!('NDEFReader' in window)) {
-                updateStatus('ERROR', '此瀏覽器不支援 Web NFC', '請使用支援的瀏覽器');
-                return;
-            }
-            try {
-                const reader = new NDEFReader();
-                abortController = new AbortController();
-                isScanning = true;
-                scanButton.textContent = '取消掃描';
-                scanButton.classList.replace('bg-red-500', 'bg-yellow-500');
-                updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤');
-
-                abortController.signal.onabort = () => {
-                    isScanning = false;
-                    scanButton.textContent = '開始巡邏掃描';
-                    scanButton.classList.replace('bg-yellow-500', 'bg-red-500');
-                    updateStatus('IDLE', '掃描已取消', '點擊按鈕以重新開始');
-                };
-                
-                await reader.scan({ signal: abortController.signal });
-
-                reader.addEventListener('reading', async ({ message, serialNumber }) => {
-                    const currentTime = Date.now();
-                    if (serialNumber === lastScannedSerial && (currentTime - lastScanTime < COOLDOWN_PERIOD_MS)) return;
-                    
-                    lastScannedSerial = serialNumber;
-                    lastScanTime = currentTime;
-                    const decoder = new TextDecoder();
-                    const location = message.records.length > 0 ? decoder.decode(message.records[0].data) : "未知地點";
-                    
-                    const newLog = {
-                        location: location,
-                        timestamp: serverTimestamp(),
-                        userId: currentUserProfile.uid,
-                        userName: currentUserProfile.name,
-                        communityIds: currentUserProfile.communities || []
-                    };
-                    
-                    try {
-                        await addDoc(collection(db, "logs"), newLog);
-                        sessionLogs.push({ location: location, timestamp: new Date().toLocaleString('zh-TW') });
-                        renderSessionLog();
-                        if ('vibrate' in navigator) navigator.vibrate(200);
-                        updateStatus('SUCCESS', `打卡成功: ${location}`, '可繼續掃描下個地點');
-                        setTimeout(() => { if(isScanning) updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤'); }, 2000);
-                    } catch (e) {
-                         updateStatus('ERROR', '紀錄儲存失敗', '請檢查網路連線');
-                    }
-                });
-            } catch (error) {
-                if (error.name !== 'AbortError') updateStatus('ERROR', '無法啟動NFC掃描', '請確認NFC功能已開啟');
-                isScanning = false;
-            }
-        }
-        scanButton.addEventListener('click', toggleScan);
-        clearButton.addEventListener('click', () => {
-            sessionLogs = [];
-            renderSessionLog();
-        });
-
-        // --- 設定頁邏輯 (僅管理員) ---
-        const communityNameInput = document.getElementById('community-name-input');
-        const addCommunityButton = document.getElementById('add-community-button');
-        const communityList = document.getElementById('community-list');
-        const userList = document.getElementById('user-list');
-        const addUserForm = document.getElementById('add-user-form');
-        const addUserError = document.getElementById('add-user-error');
-        const addUserButton = document.getElementById('add-user-button');
-        const addUserLoader = document.getElementById('add-user-loader');
-        const userCommunitiesChecklist = document.getElementById('user-communities-checklist');
-
-        addCommunityButton.addEventListener('click', async () => {
-            const name = communityNameInput.value.trim();
-            if (name) {
-                await addDoc(collection(db, "communities"), { name: name });
-                communityNameInput.value = '';
-            }
-        });
-        
-        function loadCommunities() {
-            const q = query(collection(db, "communities"), orderBy("name"));
-            onSnapshot(q, (snapshot) => {
-                communityList.innerHTML = '';
-                userCommunitiesChecklist.innerHTML = ''; // 清空新增帳號表單中的社區列表
-                if (snapshot.empty) {
-                     userCommunitiesChecklist.innerHTML = '<p class="text-gray-500">請先新增服務社區</p>';
-                }
-                snapshot.forEach(doc => {
-                    const community = { id: doc.id, ...doc.data() };
-                    // 渲染社區管理列表
-                    const item = document.createElement('div');
-                    item.className = 'list-item flex justify-between items-center p-2 bg-gray-100 rounded';
-                    item.textContent = community.name;
-                    communityList.appendChild(item);
-
-                    // 渲染新增帳號表單中的社區複選框
-                    const checkItem = document.createElement('div');
-                    checkItem.className = 'flex items-center';
-                    checkItem.innerHTML = `
-                        <input id="comm-${community.id}" type="checkbox" value="${community.id}" data-name="${community.name}" class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
-                        <label for="comm-${community.id}" class="ml-2 block text-sm text-gray-900">${community.name}</label>
-                    `;
-                    userCommunitiesChecklist.appendChild(checkItem);
-                });
-            });
-        }
-        function loadUsers() {
-            onSnapshot(collection(db, "users"), (snapshot) => {
-                userList.innerHTML = '';
-                snapshot.forEach(doc => {
-                    const user = doc.data();
-                    const item = document.createElement('div');
-                    item.className = 'list-item p-2 bg-gray-100 rounded';
-                    item.innerHTML = `<p class="font-semibold">${user.name} (${user.role})</p><p class="text-sm text-gray-600">${user.email}</p>`;
-                    userList.appendChild(item);
-                });
-            });
-        }
-        
-        addUserForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            addUserError.textContent = '';
-            addUserButton.disabled = true;
-            addUserLoader.classList.remove('hidden');
-
-            const selectedCommunities = [];
-            userCommunitiesChecklist.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => {
-                selectedCommunities.push(checkbox.value);
-            });
-
-            const userData = {
-                name: document.getElementById('user-name-input').value,
-                email: document.getElementById('user-email-input').value,
-                password: document.getElementById('user-password-input').value,
-                role: document.getElementById('user-role-select').value,
-                title: document.getElementById('user-title-input').value,
-                communities: selectedCommunities,
-            };
-
-            try {
-                const createUser = httpsCallable(functions, 'createUser');
-                const result = await createUser(userData);
-                if (result.data.success) {
-                    addUserForm.reset();
-                    // Optional: show a success message
-                } else {
-                    throw new Error(result.data.error || '未知錯誤');
-                }
-            } catch (error) {
-                addUserError.textContent = error.message || "建立帳號失敗";
-            } finally {
-                addUserButton.disabled = false;
-                addUserLoader.classList.add('hidden');
-            }
-        });
-
-        // --- 資料頁邏輯 ---
-        function loadDataLogs() {
-            const dataLogContainer = document.getElementById('data-log-container');
-            let q;
-            const userCommunities = currentUserProfile.communities || [];
-            if (currentUserProfile.role === '管理員') {
-                q = query(collection(db, "logs"), orderBy("timestamp", "desc"));
-            } else if (userCommunities.length > 0) {
-                 q = query(collection(db, "logs"), where("communityIds", "array-contains-any", userCommunities), orderBy("timestamp", "desc"));
-            } else {
-                q = null; // 如果非管理員且沒有社區，則不查詢
-            }
-
-            if (!q) {
-                dataLogContainer.innerHTML = '<p class="text-center text-gray-500 py-4">您尚未被指派任何社區</p>';
-                return;
-            }
-
-            onSnapshot(q, (snapshot) => {
-                dataLogContainer.innerHTML = snapshot.empty ? '<p class="text-center text-gray-500 py-4">沒有任何歷史紀錄</p>' : '';
-                snapshot.forEach(doc => {
-                    const log = doc.data();
-                    const item = document.createElement('div');
-                    item.className = 'log-item bg-white p-3 rounded-lg shadow-sm';
-                    item.innerHTML = `<div><p class="font-semibold">${log.location}</p><p class="text-sm text-gray-500">${log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '時間待確認'}</p><p class="text-xs text-gray-400">by ${log.userName}</p></div>`;
-                    dataLogContainer.appendChild(item);
-                });
-            });
-        }
-
-        // --- 初始化 ---
-        const clockDateEl = document.getElementById('clock-date');
-        const clockTimeEl = document.getElementById('clock-time');
-        function updateClock() {
-            const now = new Date();
-            clockDateEl.textContent = now.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
-            clockTimeEl.textContent = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const rememberedEmail = localStorage.getItem('rememberedEmail');
-            if (rememberedEmail) {
-                emailInput.value = rememberedEmail;
-                rememberMeCheckbox.checked = true;
-            }
-            updateClock();
-            setInterval(updateClock, 1000);
-        });
+        // Firebase and other logic will go here
     </script>
 </body>
 </html>
