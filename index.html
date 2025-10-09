@@ -1,0 +1,2188 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>西北勤務打卡系統</title>
+    <link rel="icon" type="image/png" href="https://static.wixstatic.com/media/6148f9_56377cef73c1498f95a2c3057b89f2ed~mv2.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; touch-action: manipulation; }
+        .spinner {
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s ease-in-out infinite;
+        }
+        .spinner-gray {
+            border: 2px solid #e5e7eb; /* gray-200 */
+            border-radius: 50%;
+            border-top-color: #4b5563; /* gray-600 */
+            width: 16px;
+            height: 16px;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        #camera-modal, #add-account-modal, #map-modal, #profile-camera-modal, #edit-account-modal, #delete-confirm-modal, #profile-modal { z-index: 1000; }
+        .aspect-16-9 {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 Aspect Ratio */
+        }
+        .aspect-16-9 > video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        /* 響應式設計 - 手機優先 */
+        @media (max-width: 450px) {
+            /* 只在登入頁面時應用置中樣式 */
+            body:has(#login-view:not(.hidden)) #root-container {
+                width: 360px !important;
+                max-width: none !important;
+                margin: auto !important;
+                border-radius: 1rem !important;
+                height: 480px !important;
+                max-height: none !important;
+                position: absolute !important;
+                top: 50% !important;
+                left: 50% !important;
+                transform: translate(-50%, -50%) !important;
+            }
+            
+            /* 登入後的樣式 - 恢復原有佈局 */
+            body:has(#main-view:not(.hidden)) #root-container {
+                width: 400px !important;
+                height: 750px !important;
+                position: relative !important;
+                top: auto !important;
+                left: auto !important;
+                transform: none !important;
+                margin: 10px auto 50px !important;
+            }
+            
+            body {
+                overflow: hidden;
+                position: relative;
+                height: 100vh;
+                margin: 0;
+            }
+            
+            #bottom-nav {
+                border-bottom-left-radius: 1rem !important;
+                border-bottom-right-radius: 1rem !important;
+                overflow: hidden;
+            }
+        }
+        
+        /* 確保登入頁面在手機上也能正確顯示 */
+        @media (max-height: 600px) {
+            #login-view {
+                min-height: auto !important;
+            }
+        }
+        
+        /* 確保內容區域可以正確捲動 */
+        #main-view {
+            position: relative;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 主頁佈局調整 */
+        #root-container {
+            margin: 10px auto 50px !important;
+        }
+        
+        /* 確保登入後頁面在登入狀態下完全隱藏 */
+        #main-view.hidden {
+            display: none !important;
+        }
+        
+        #main-view header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            z-index: 20;
+        }
+        
+        #bottom-nav {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            z-index: 20;
+        }
+        
+        #main-view .flex-1.flex-col {
+            margin-top: 70px;
+            margin-bottom: 70px;
+            height: calc(100% - 140px);
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body class="bg-red-600 flex justify-center items-center min-h-screen">
+
+    <div id="root-container" class="w-[calc(100%-20px)] max-w-[400px] h-[calc(100vh-80px)] max-h-[750px] bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col transition-all duration-300 ease-in-out mx-auto">
+        
+        <!-- 登入畫面 -->
+        <div id="login-view" class="flex-1 overflow-y-auto flex flex-col min-h-[480px]">
+            <header class="bg-white p-6 text-center">
+                <img id="login-logo" src="https://static.wixstatic.com/media/6148f9_56377cef73c1498f95a2c3057b89f2ed~mv2.png" alt="西北保全 Logo" class="mx-auto" style="width: 120px; height: 60px;">
+                <h1 class="text-xl font-bold text-red-600 mt-4">西北勤務打卡系統</h1>
+            </header>
+            <main class="p-6 md:p-8 flex-1 flex flex-col justify-center">
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <label for="email" class="block text-sm font-medium text-gray-700">電子郵件</label>
+                            <div class="flex items-center text-sm">
+                                <input id="remember-me" type="checkbox" class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
+                                <label for="remember-me" class="ml-1.5 text-gray-700">記住我</label>
+                            </div>
+                        </div>
+                        <input type="email" id="email" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="your.email@company.com">
+                    </div>
+                    <div>
+                         <label for="login-password" class="block text-sm font-medium text-gray-700">密碼</label>
+                        <div class="relative mt-1">
+                            <input type="password" id="login-password" class="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 pr-10" placeholder="••••••••">
+                            <button type="button" id="toggle-password-btn" class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700">
+                            </button>
+                        </div>
+                    </div>
+                    <button id="login-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>
+                        <span>登入系統</span>
+                    </button>
+                    <p id="login-message" class="text-red-500 text-sm text-center min-h-[10px]"></p>
+                    <p class="text-center text-gray-600 text-xs mt-2">V1.4.6</p>
+                </div>
+            </main>
+        </div>
+
+        <!-- 主操作畫面 -->
+        <div id="main-view" class="hidden flex-1 flex flex-col relative">
+            <header class="absolute top-0 left-0 w-full z-20 bg-red-600 text-white p-3 flex justify-between items-center shadow-md h-[70px]">
+                <div class="flex items-center space-x-4">
+                    <img src="https://static.wixstatic.com/media/6148f9_56377cef73c1498f95a2c3057b89f2ed~mv2.png" alt="西北保全 Logo" style="width: 80px; height: 40px; object-fit: contain;">
+                    <div>
+                        <h1 class="text-lg font-bold">西北勤務打卡系統</h1>
+                        <p id="user-name-display" class="text-sm opacity-90"></p>
+                    </div>
+                </div>
+                <button id="profile-btn" class="rounded-full h-12 w-12 bg-gray-200 overflow-hidden flex-shrink-0 border-2 border-white">
+                    <img id="header-profile-img" src="https://placehold.co/96x96/e2e8f0/4a5568?text=頭像" class="h-full w-full object-cover">
+                </button>
+            </header>
+
+            <!-- 中間內容區 (包含子導覽與可滾動內容) -->
+            <div class="flex-1 flex flex-col overflow-hidden">
+                 <!-- Date Time Display / Sub Nav Container -->
+                <div class="h-[50px] border-b border-gray-200 bg-gray-100 flex-shrink-0">
+                    <div id="datetime-display" class="h-full px-6 bg-white flex items-center justify-center text-xl font-semibold text-gray-800">
+                        <!-- Date and time will be injected here by JavaScript -->
+                    </div>
+                     <!-- 子導覽列 -->
+                    <div id="sub-tab-nav" class="h-full px-6">
+                        <!-- 設定頁面專用 -->
+                        <nav id="settings-tab-nav" class="hidden -mb-px flex space-x-6 h-full items-center" aria-label="Tabs">
+                            <button id="settings-account-tab-btn" class="whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm">帳號</button>
+                            <button id="settings-rules-tab-btn" class="whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm">規則</button>
+                        </nav>
+                         <!-- 打卡頁面專用 -->
+                        <nav id="checkin-tab-nav" class="hidden -mb-px flex space-x-6 h-full items-center" aria-label="Tabs">
+                            <button id="checkin-location-tab-btn" class="whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm">定位打卡</button>
+                            <button id="checkin-history-tab-btn" class="whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm">打卡紀錄</button>
+                        </nav>
+                    </div>
+                </div>
+                
+                <!-- 可滾動的頁面內容 -->
+                <main class="flex-1 overflow-y-auto p-6 bg-gray-100 h-[calc(100%-50px)]">
+                    <div id="message-box" class="hidden p-4 mb-4 text-sm rounded-lg" role="alert">
+                        <span class="font-medium" id="message-content"></span>
+                    </div>
+
+                    <!-- 儀表板頁面 -->
+                    <div id="dashboard-page">
+                        <!-- 狀態顯示區 -->
+                        <div id="status-card" class="bg-white rounded-lg p-5 mb-6 text-center border transition-all">
+                             <div class="flex justify-between items-center">
+                                <div class="text-left">
+                                    <h2 class="text-lg font-semibold text-gray-700 mb-1">目前狀態</h2>
+                                    <p id="current-status" class="text-2xl font-bold text-gray-800">尚未打卡</p>
+                                </div>
+                                <div class="text-right">
+                                     <h2 class="text-lg font-semibold text-gray-700 mb-1">今日工時</h2>
+                                    <p id="work-duration" class="text-2xl font-bold text-gray-800">-- 小時 -- 分</p>
+                                </div>
+                             </div>
+                        </div>
+                        
+                        <!-- 所有人狀態列表 -->
+                        <div id="all-users-status" class="bg-white rounded-lg p-5 mb-6 border">
+                            <h2 class="text-lg font-semibold text-gray-700 mb-4 flex items-center justify-between">
+                                <span>所有人狀態</span>
+                                <button id="refresh-status-btn" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-1 px-3 rounded-lg border border-gray-300 flex items-center space-x-1.5 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                                    <span>刷新</span>
+                                </button>
+                            </h2>
+                            <div id="users-status-list" class="space-y-4">
+                                <div class="animate-pulse flex space-x-4 items-center">
+                                    <div class="rounded-full bg-gray-200 h-12 w-12"></div>
+                                    <div class="flex-1 space-y-2 py-1">
+                                        <div class="h-4 bg-gray-200 rounded w-3/4"></div>
+                                        <div class="h-4 bg-gray-200 rounded w-1/2"></div>
+                                    </div>
+                                </div>
+                                <div class="animate-pulse flex space-x-4 items-center">
+                                    <div class="rounded-full bg-gray-200 h-12 w-12"></div>
+                                    <div class="flex-1 space-y-2 py-1">
+                                        <div class="h-4 bg-gray-200 rounded w-3/4"></div>
+                                        <div class="h-4 bg-gray-200 rounded w-1/2"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 打卡頁面 -->
+                    <div id="checkin-page" class="hidden">
+                        <!-- 定位打卡內容 -->
+                        <div id="checkin-location-content">
+                            <!-- Map Display -->
+                            <div class="mb-6">
+                                <h3 class="text-lg font-semibold text-gray-800 mb-3 border-b pb-2 flex items-center justify-between">
+                                    <div class="flex items-center space-x-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                                        <span>目前位置</span>
+                                    </div>
+                                    <button id="relocate-btn" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-1 px-3 rounded-lg border border-gray-300 flex items-center space-x-1.5 transition-colors">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                                        <span>重新定位</span>
+                                    </button>
+                                </h3>
+                                <div id="map-wrapper" class="w-full h-[300px] rounded-lg bg-gray-200 flex items-center justify-center text-gray-500 overflow-hidden">
+                                    <p id="map-loading-text">正在取得 GPS 定位...</p>
+                                    <iframe id="current-location-iframe" class="hidden w-full h-full border-0"></iframe>
+                                </div>
+                            </div>
+                            <!-- 打卡按鈕區 -->
+                            <div class="grid grid-cols-2 gap-4 mb-6">
+                                <button id="clock-in-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-4 rounded-lg shadow-md transition-all duration-200 flex items-center justify-center space-x-2 disabled:bg-gray-400">
+                                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>
+                                    <span>上班打卡</span>
+                                </button>
+                                <button id="clock-out-btn" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-4 rounded-lg shadow-md transition-all duration-200 flex items-center justify-center space-x-2 disabled:bg-gray-400" disabled>
+                                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                                    <span>下班打卡</span>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- 打卡紀錄內容 -->
+                        <div id="checkin-history-content" class="hidden">
+                             <!-- 日期選擇 -->
+                            <div class="mb-4">
+                                <label for="history-date-picker" class="block text-sm font-medium text-gray-700 mb-1">選擇日期</label>
+                                <input type="date" id="history-date-picker" class="w-full p-2 border border-gray-300 rounded-lg">
+                            </div>
+                            <!-- 打卡紀錄 -->
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-800 mb-3 border-b pb-2">打卡紀錄</h3>
+                                <div id="history-log" class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                                    <!-- Records will be dynamically inserted here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 設定頁面 -->
+                    <div id="settings-page" class="hidden h-full">
+                        <!-- Tab content -->
+                        <div class="h-full flex flex-col">
+                            <!-- Account Tab Content -->
+                            <div id="settings-account-content" class="h-full flex flex-col">
+                                <div class="flex justify-end mb-4 flex-shrink-0">
+                                    <button id="add-account-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                        <span>新增帳號</span>
+                                    </button>
+                                </div>
+                                <div class="flex-1 overflow-y-auto">
+                                    <div id="account-list" class="space-y-3">
+                                        <p class="text-gray-500 text-center py-4">正在載入帳號資料...</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Rules Tab Content -->
+                            <div id="settings-rules-content" class="hidden">
+                                <p class="text-gray-600 text-center py-10">系統開發中</p>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+
+            <!-- 底部導覽列 -->
+            <nav id="bottom-nav" class="absolute bottom-0 left-0 w-full z-20 border-t bg-gray-50 h-[70px] flex items-center">
+                <div class="flex justify-around w-full">
+                    <button id="nav-settings-btn" class="hidden flex-1 p-3 text-center text-gray-500 flex flex-col items-center justify-center space-y-1 transition-colors duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        <span class="text-xs font-medium">設定</span>
+                    </button>
+                    <button id="nav-dashboard-btn" class="flex-1 p-3 text-center text-gray-500 flex flex-col items-center justify-center space-y-1 transition-colors duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+                        <span class="text-xs font-medium">儀表板</span>
+                    </button>
+                    <button id="nav-checkin-btn" class="flex-1 p-3 text-center text-gray-500 flex flex-col items-center justify-center space-y-1 transition-colors duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                        <span class="text-xs font-medium">打卡</span>
+                    </button>
+                </div>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Camera Modal -->
+    <div id="camera-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col max-h-full">
+            <header class="p-4 border-b">
+                <h3 id="camera-modal-title" class="text-lg font-bold text-center">打卡成功！</h3>
+            </header>
+            <main class="p-4 flex-1 overflow-y-auto">
+                <div class="space-y-4">
+                    <div class="aspect-16-9 bg-gray-200 rounded-lg overflow-hidden">
+                        <video id="camera-video" playsinline autoplay></video>
+                        <canvas id="photo-canvas" class="hidden"></canvas>
+                    </div>
+                     <div>
+                        <label for="photo-description" class="block text-sm font-medium text-gray-700">內容說明 (30字內)</label>
+                        <textarea id="photo-description" rows="2" maxlength="30" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="請輸入說明..."></textarea>
+                    </div>
+                    <button id="take-photo-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
+                        <span>拍照</span>
+                    </button>
+                    <div id="photo-preview-container" class="grid grid-cols-3 gap-2">
+                        <!-- Photo thumbnails will be added here -->
+                    </div>
+                </div>
+            </main>
+            <footer class="p-4 bg-gray-50 border-t">
+                <button id="close-camera-btn" class="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">
+                    完成
+                </button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Map Modal -->
+    <div id="map-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[1100]">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col">
+            <header class="p-4 border-b flex justify-between items-center">
+                <h3 class="text-lg font-bold">打卡位置</h3>
+                <button id="close-map-modal-btn" class="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </header>
+            <main class="h-[300px] bg-gray-200">
+                <iframe id="map-iframe" class="w-full h-full border-0" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src=""></iframe>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[1200]">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col max-h-full">
+            <header class="p-4 border-b flex justify-between items-center">
+                <h3 class="text-lg font-bold">個人資料</h3>
+                <button id="close-profile-modal-btn" class="text-gray-400 hover:text-gray-600">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </header>
+            <main class="p-6 flex-1 overflow-y-auto">
+                <form id="profile-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">大頭照</label>
+                        <div class="mt-1 flex items-center space-x-4">
+                            <span class="inline-block h-20 w-20 rounded-full overflow-hidden bg-gray-100">
+                                <img id="profile-modal-photo-preview" src="https://placehold.co/96x96/e2e8f0/4a5568?text=Photo" alt="大頭照預覽" class="h-full w-full object-cover">
+                            </span>
+                            <button type="button" id="profile-modal-upload-btn" class="text-sm bg-white hover:bg-gray-100 text-gray-700 font-semibold py-2 px-3 rounded-lg border border-gray-300">
+                                更換圖片
+                            </button>
+                            <input type="file" id="profile-modal-photo-input" class="hidden" accept="image/*">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="profile-modal-username" class="block text-sm font-medium text-gray-700">帳號</label>
+                        <input type="text" id="profile-modal-username" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label for="profile-modal-name" class="block text-sm font-medium text-gray-700">姓名</label>
+                        <input type="text" id="profile-modal-name" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label for="profile-modal-email" class="block text-sm font-medium text-gray-700">電子郵件 (不可修改)</label>
+                        <input type="email" id="profile-modal-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100" readonly>
+                    </div>
+                     <div>
+                        <label for="profile-modal-role" class="block text-sm font-medium text-gray-700">角色 (不可修改)</label>
+                        <input type="text" id="profile-modal-role" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100" readonly>
+                    </div>
+                    <div>
+                        <label for="profile-modal-title" class="block text-sm font-medium text-gray-700">職稱</label>
+                        <input type="text" id="profile-modal-title" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                     <div>
+                        <label for="profile-modal-phone" class="block text-sm font-medium text-gray-700">手機號碼</label>
+                        <input type="tel" id="profile-modal-phone" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                </form>
+            </main>
+            <footer class="p-4 bg-gray-50 border-t flex flex-col space-y-3">
+                 <div class="flex justify-end space-x-3">
+                     <button id="cancel-profile-edit-btn" type="button" class="bg-white hover:bg-gray-100 text-gray-700 font-bold py-2 px-4 rounded-lg border">取消</button>
+                     <button id="submit-profile-edit-btn" type="submit" form="profile-form" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">儲存變更</button>
+                </div>
+                <button id="modal-logout-btn" type="button" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">登出</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Photo Viewer Modal -->
+    <div id="photo-viewer-modal" class="hidden fixed inset-0 bg-black bg-opacity-85 flex items-center justify-center p-4 z-[1300]">
+        <div class="relative bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col max-h-[90vh]">
+            <header class="p-4 border-b flex justify-between items-center">
+                <h3 class="text-lg font-bold">打卡照片</h3>
+                <button id="close-photo-viewer-btn" class="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </header>
+            <main class="flex-1 flex items-center justify-center p-2 bg-gray-900 overflow-hidden">
+                <img id="viewer-img" src="" class="max-w-full max-h-full object-contain">
+            </main>
+            <footer id="viewer-footer" class="p-2 bg-gray-800 text-white flex justify-between items-center">
+                <button id="prev-photo-btn" class="p-2 rounded-full hover:bg-gray-700 disabled:opacity-50" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <span id="photo-counter"></span>
+                <button id="next-photo-btn" class="p-2 rounded-full hover:bg-gray-700 disabled:opacity-50" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+            </footer>
+        </div>
+    </div>
+
+
+    <!-- Add Account Modal -->
+    <div id="add-account-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col max-h-full">
+            <header class="p-4 border-b flex justify-between items-center">
+                <h3 id="add-account-modal-title" class="text-lg font-bold">新增帳號</h3>
+                <button id="close-add-account-modal-btn" class="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </header>
+            <main class="p-6 flex-1 overflow-y-auto">
+                <form id="add-account-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">大頭照</label>
+                        <div class="mt-1 flex items-center space-x-4">
+                            <span class="inline-block h-20 w-20 rounded-full overflow-hidden bg-gray-100">
+                                <img id="new-account-photo-preview" src="https://placehold.co/96x96/e2e8f0/4a5568?text=Photo" alt="大頭照預覽" class="h-full w-full object-cover">
+                            </span>
+                            <div class="flex flex-col space-y-2">
+                                <button type="button" id="upload-photo-btn" class="text-sm bg-white hover:bg-gray-100 text-gray-700 font-semibold py-2 px-3 rounded-lg border border-gray-300">
+                                    上傳圖片
+                                </button>
+                                <input type="file" id="new-account-photo-input" class="hidden" accept="image/*">
+                                <button type="button" id="open-camera-for-profile-btn" class="text-sm bg-white hover:bg-gray-100 text-gray-700 font-semibold py-2 px-3 rounded-lg border border-gray-300">
+                                    開啟相機
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="new-account-username" class="block text-sm font-medium text-gray-700">帳號</label>
+                        <input type="text" id="new-account-username" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label for="new-account-email" class="block text-sm font-medium text-gray-700">電子郵件</label>
+                        <input type="email" id="new-account-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label for="new-account-password" class="block text-sm font-medium text-gray-700">密碼</label>
+                        <input type="password" id="new-account-password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                     <div>
+                        <label for="new-account-name" class="block text-sm font-medium text-gray-700">姓名</label>
+                        <input type="text" id="new-account-name" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label for="new-account-role" class="block text-sm font-medium text-gray-700">角色</label>
+                        <select id="new-account-role" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                            <option>員工</option>
+                            <option>管理員</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="new-account-title" class="block text-sm font-medium text-gray-700">職稱</label>
+                        <input type="text" id="new-account-title" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                     <div>
+                        <label for="new-account-phone" class="block text-sm font-medium text-gray-700">手機號碼</label>
+                        <input type="tel" id="new-account-phone" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                </form>
+            </main>
+            <footer class="p-4 bg-gray-50 border-t flex justify-end space-x-3">
+                <button id="cancel-add-account-btn" type="button" class="bg-white hover:bg-gray-100 text-gray-700 font-bold py-2 px-4 rounded-lg border">
+                    取消
+                </button>
+                 <button id="submit-add-account-btn" type="submit" form="add-account-form" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
+                    儲存
+                </button>
+            </footer>
+        </div>
+    </div>
+    
+    <!-- Edit Account Modal -->
+    <div id="edit-account-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col max-h-full">
+            <header class="p-4 border-b flex justify-between items-center">
+                <h3 class="text-lg font-bold">編輯帳號</h3>
+                <button id="close-edit-account-modal-btn" class="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </header>
+            <main class="p-6 flex-1 overflow-y-auto">
+                <form id="edit-account-form" class="space-y-4">
+                    <input type="hidden" id="edit-account-id">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">大頭照</label>
+                        <div class="mt-1 flex items-center space-x-4">
+                            <span class="inline-block h-20 w-20 rounded-full overflow-hidden bg-gray-100">
+                                <img id="edit-account-photo-preview" src="https://placehold.co/96x96/e2e8f0/4a5568?text=Photo" alt="大頭照預覽" class="h-full w-full object-cover">
+                            </span>
+                            <div class="flex flex-col space-y-2">
+                                <button type="button" id="edit-upload-photo-btn" class="text-sm bg-white hover:bg-gray-100 text-gray-700 font-semibold py-2 px-3 rounded-lg border border-gray-300">
+                                    更換圖片
+                                </button>
+                                <input type="file" id="edit-account-photo-input" class="hidden" accept="image/*">
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="edit-account-username" class="block text-sm font-medium text-gray-700">帳號</label>
+                        <input type="text" id="edit-account-username" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label for="edit-account-email" class="block text-sm font-medium text-gray-700">電子郵件</label>
+                        <input type="email" id="edit-account-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 bg-gray-100" readonly>
+                    </div>
+                    <div>
+                        <label for="edit-account-name" class="block text-sm font-medium text-gray-700">姓名</label>
+                        <input type="text" id="edit-account-name" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label for="edit-account-role" class="block text-sm font-medium text-gray-700">角色</label>
+                        <select id="edit-account-role" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                            <option>員工</option>
+                            <option>管理員</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="edit-account-title" class="block text-sm font-medium text-gray-700">職稱</label>
+                        <input type="text" id="edit-account-title" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                     <div>
+                        <label for="edit-account-phone" class="block text-sm font-medium text-gray-700">手機號碼</label>
+                        <input type="tel" id="edit-account-phone" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </div>
+                </form>
+            </main>
+            <footer class="p-4 bg-gray-50 border-t flex justify-end space-x-3">
+                <button id="cancel-edit-account-btn" type="button" class="bg-white hover:bg-gray-100 text-gray-700 font-bold py-2 px-4 rounded-lg border">
+                    取消
+                </button>
+                 <button id="submit-edit-account-btn" type="submit" form="edit-account-form" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
+                    更新
+                </button>
+            </footer>
+        </div>
+    </div>
+    
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-confirm-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[1200]">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm">
+            <div class="p-6 text-center">
+                <svg class="mx-auto mb-4 text-gray-400 w-12 h-12" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
+                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 11V6m0 8h.01M19 10a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                </svg>
+                <h3 class="mb-5 text-lg font-normal text-gray-600">確定要停用此帳號嗎？</h3>
+                <p class="mb-2 text-sm text-gray-500">此帳號將無法再登入。</p>
+                <p id="delete-user-info" class="mb-5 text-sm font-normal text-gray-500"></p>
+                <button id="confirm-delete-btn" type="button" class="text-white bg-red-600 hover:bg-red-800 font-medium rounded-lg text-sm inline-flex items-center px-5 py-2.5 text-center mr-2">
+                    是的, 停用
+                </button>
+                <button id="cancel-delete-btn" type="button" class="text-gray-500 bg-white hover:bg-gray-100 rounded-lg border border-gray-200 text-sm font-medium px-5 py-2.5 hover:text-gray-900">
+                    取消
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Profile Camera Modal -->
+    <div id="profile-camera-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[1200]">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col max-h-full">
+            <header class="p-4 border-b">
+                <h3 class="text-lg font-bold text-center">拍攝大頭照</h3>
+            </header>
+            <main class="p-4 flex-1 overflow-y-auto">
+                <div class="space-y-4">
+                    <div class="relative w-full bg-gray-200 rounded-lg overflow-hidden">
+                        <video id="profile-camera-video" class="w-full h-auto" playsinline autoplay></video>
+                        <canvas id="profile-photo-canvas" class="hidden"></canvas>
+                        <img id="profile-photo-snapshot" class="hidden w-full h-auto" />
+                    </div>
+                     <div class="grid grid-cols-2 gap-4">
+                        <button id="take-profile-photo-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2">
+                            <span>拍照</span>
+                        </button>
+                        <button id="retake-profile-photo-btn" class="hidden w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg">
+                            重拍
+                        </button>
+                     </div>
+                </div>
+            </main>
+            <footer class="p-4 bg-gray-50 border-t flex justify-end space-x-3">
+                 <button id="cancel-profile-camera-btn" type="button" class="bg-white hover:bg-gray-100 text-gray-700 font-bold py-2 px-4 rounded-lg border">
+                    取消
+                </button>
+                <button id="save-profile-photo-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-400" disabled>
+                    儲存照片
+                </button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Password Prompt Modal -->
+    <div id="password-prompt-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[1300]">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">請輸入管理密碼</h3>
+                <input type="password" id="prompt-password-input" class="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500">
+                <p id="prompt-message" class="text-red-500 text-sm min-h-[20px] mt-2"></p>
+                <div class="mt-4 flex justify-end space-x-3">
+                    <button id="cancel-prompt-btn" type="button" class="bg-white hover:bg-gray-100 text-gray-700 font-bold py-2 px-4 rounded-lg border">取消</button>
+                    <button id="submit-prompt-btn" type="button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">確認</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp, getApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, doc, updateDoc, arrayUnion, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getStorage, ref, uploadString, getDownloadURL, uploadBytes, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const firebaseConfig = {
+  apiKey: "AIzaSyBcKSxzw4TwzEwoogqh2MGnFIdUubaGbqM",
+  authDomain: "nwcom-check-in-c664b.firebaseapp.com",
+  projectId: "nwcom-check-in-c664b",
+  storageBucket: "nwcom-check-in-c664b.firebasestorage.app",
+  messagingSenderId: "1090639905673",
+  appId: "1:1090639905673:web:357f9530182c36e670d758",
+  measurementId: "G-40THHW5XYP"
+};
+
+            // --- DOM 元素 ---
+            const rootContainer = document.getElementById('root-container');
+            const loginView = document.getElementById('login-view'), mainView = document.getElementById('main-view');
+            const emailInput = document.getElementById('email'), passwordInput = document.getElementById('login-password');
+            const togglePasswordBtn = document.getElementById('toggle-password-btn'), rememberMeCheckbox = document.getElementById('remember-me');
+            const loginBtn = document.getElementById('login-btn'), loginMessage = document.getElementById('login-message');
+            const userNameDisplay = document.getElementById('user-name-display');
+            const headerProfileImg = document.getElementById('header-profile-img');
+            const profileBtn = document.getElementById('profile-btn');
+            const forgotPasswordLink = document.getElementById('forgot-password-link');
+            const currentStatusEl = document.getElementById('current-status'), workDurationEl = document.getElementById('work-duration');
+            const clockInBtn = document.getElementById('clock-in-btn'), clockOutBtn = document.getElementById('clock-out-btn');
+            const historyLogEl = document.getElementById('history-log');
+            const messageBoxEl = document.getElementById('message-box'), messageContentEl = document.getElementById('message-content');
+            const statusCardEl = document.getElementById('status-card');
+            const mapWrapper = document.getElementById('map-wrapper');
+            const mapLoadingText = document.getElementById('map-loading-text');
+            const currentLocationIframe = document.getElementById('current-location-iframe');
+            const relocateBtn = document.getElementById('relocate-btn');
+            
+            // --- 頁面與導覽按鈕 ---
+            const dashboardPage = document.getElementById('dashboard-page');
+            const datetimeDisplay = document.getElementById('datetime-display');
+            const checkinPage = document.getElementById('checkin-page');
+            const settingsPage = document.getElementById('settings-page');
+            const navDashboardBtn = document.getElementById('nav-dashboard-btn');
+            const navCheckinBtn = document.getElementById('nav-checkin-btn');
+            const navSettingsBtn = document.getElementById('nav-settings-btn');
+            const subTabNav = document.getElementById('sub-tab-nav');
+            const settingsTabNav = document.getElementById('settings-tab-nav');
+            const checkinTabNav = document.getElementById('checkin-tab-nav');
+            const historyDatePicker = document.getElementById('history-date-picker');
+
+            // --- 打卡子頁面 ---
+            const checkinLocationTabBtn = document.getElementById('checkin-location-tab-btn');
+            const checkinHistoryTabBtn = document.getElementById('checkin-history-tab-btn');
+            const checkinLocationContent = document.getElementById('checkin-location-content');
+            const checkinHistoryContent = document.getElementById('checkin-history-content');
+
+
+            // --- 設定頁面元素 ---
+            const settingsAccountTabBtn = document.getElementById('settings-account-tab-btn');
+            const settingsRulesTabBtn = document.getElementById('settings-rules-tab-btn');
+            const settingsAccountContent = document.getElementById('settings-account-content');
+            const settingsRulesContent = document.getElementById('settings-rules-content');
+            const addAccountBtn = document.getElementById('add-account-btn');
+            const accountList = document.getElementById('account-list');
+
+             // --- 個人資料 Modal 元素 ---
+            const profileModal = document.getElementById('profile-modal');
+            const closeProfileModalBtn = document.getElementById('close-profile-modal-btn');
+            const profileForm = document.getElementById('profile-form');
+            const profileModalPhotoPreview = document.getElementById('profile-modal-photo-preview');
+            const profileModalUploadBtn = document.getElementById('profile-modal-upload-btn');
+            const profileModalPhotoInput = document.getElementById('profile-modal-photo-input');
+            const cancelProfileEditBtn = document.getElementById('cancel-profile-edit-btn');
+            const submitProfileEditBtn = document.getElementById('submit-profile-edit-btn');
+            const modalLogoutBtn = document.getElementById('modal-logout-btn');
+
+            // --- 新增帳號 Modal 元素 ---
+            const addAccountModal = document.getElementById('add-account-modal');
+            const closeAddAccountModalBtn = document.getElementById('close-add-account-modal-btn');
+            const cancelAddAccountBtn = document.getElementById('cancel-add-account-btn');
+            const addAccountForm = document.getElementById('add-account-form');
+            const submitAddAccountBtn = document.getElementById('submit-add-account-btn');
+            const newAccountPhotoPreview = document.getElementById('new-account-photo-preview');
+            const uploadPhotoBtn = document.getElementById('upload-photo-btn');
+            const newAccountPhotoInput = document.getElementById('new-account-photo-input');
+            const openCameraForProfileBtn = document.getElementById('open-camera-for-profile-btn');
+            
+            // --- 編輯帳號 Modal 元素 ---
+            const editAccountModal = document.getElementById('edit-account-modal');
+            const closeEditAccountModalBtn = document.getElementById('close-edit-account-modal-btn');
+            const cancelEditAccountBtn = document.getElementById('cancel-edit-account-btn');
+            const editAccountForm = document.getElementById('edit-account-form');
+            const submitEditAccountBtn = document.getElementById('submit-edit-account-btn');
+            const editAccountPhotoPreview = document.getElementById('edit-account-photo-preview');
+            const editUploadPhotoBtn = document.getElementById('edit-upload-photo-btn');
+            const editAccountPhotoInput = document.getElementById('edit-account-photo-input');
+            const editAccountIdInput = document.getElementById('edit-account-id');
+            
+            // --- 刪除確認 Modal ---
+            const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+            const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+            const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+            const deleteUserInfo = document.getElementById('delete-user-info');
+
+
+            // --- 大頭照相機 Modal 元素 ---
+            const profileCameraModal = document.getElementById('profile-camera-modal');
+            const profileCameraVideo = document.getElementById('profile-camera-video');
+            const profilePhotoCanvas = document.getElementById('profile-photo-canvas');
+            const profilePhotoSnapshot = document.getElementById('profile-photo-snapshot');
+            const takeProfilePhotoBtn = document.getElementById('take-profile-photo-btn');
+            const retakeProfilePhotoBtn = document.getElementById('retake-profile-photo-btn');
+            const cancelProfileCameraBtn = document.getElementById('cancel-profile-camera-btn');
+            const saveProfilePhotoBtn = document.getElementById('save-profile-photo-btn');
+
+            // --- 打卡相機 Modal 元素 ---
+            const cameraModal = document.getElementById('camera-modal');
+            const cameraModalTitle = document.getElementById('camera-modal-title');
+            const videoElement = document.getElementById('camera-video');
+            const canvasElement = document.getElementById('photo-canvas');
+            const takePhotoBtn = document.getElementById('take-photo-btn');
+            const closeCameraBtn = document.getElementById('close-camera-btn');
+            const photoPreviewContainer = document.getElementById('photo-preview-container');
+            const photoDescriptionInput = document.getElementById('photo-description');
+
+            // --- 地圖 Modal 元素 ---
+            const mapModal = document.getElementById('map-modal');
+            const closeMapModalBtn = document.getElementById('close-map-modal-btn');
+            const mapIframe = document.getElementById('map-iframe');
+
+            // --- 密碼提示 Modal 元素 ---
+            const passwordPromptModal = document.getElementById('password-prompt-modal');
+            const promptPasswordInput = document.getElementById('prompt-password-input');
+            const promptMessage = document.getElementById('prompt-message');
+            const cancelPromptBtn = document.getElementById('cancel-prompt-btn');
+            const submitPromptBtn = document.getElementById('submit-prompt-btn');
+            
+            // --- 照片檢視 Modal 元素 ---
+            const photoViewerModal = document.getElementById('photo-viewer-modal');
+            const closePhotoViewerBtn = document.getElementById('close-photo-viewer-btn');
+            const viewerImg = document.getElementById('viewer-img');
+            const prevPhotoBtn = document.getElementById('prev-photo-btn');
+            const nextPhotoBtn = document.getElementById('next-photo-btn');
+            const photoCounter = document.getElementById('photo-counter');
+
+            const eyeIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+            const eyeOffIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"></path><line x1="2" x2="22" y1="2" y2="22"></line></svg>`;
+            
+            let workDurationInterval = null, unsubscribeFromHistory = null, unsubscribeFromAccounts = null, unsubscribeFromStatus=null;
+            let dateTimeInterval = null;
+            let currentPosition = null;
+            let cameraStream = null;
+            let currentUserRole = null;
+            let currentUserData = null;
+            let profilePhotoFile = null;
+            let editProfilePhotoFile = null;
+            let editCurrentUserPhotoFile = null;
+            let viewerPhotos = [];
+            let currentPhotoIndex = 0;
+            let tempPhotos = [];
+
+            // --- Firebase 設定檢查 ---
+            function checkFirebaseConfig() {
+                if (firebaseConfig.apiKey.startsWith("AIzaSy") === false) {
+                    loginMessage.textContent = "錯誤：請在程式碼中貼上您的 Firebase 設定。";
+                    loginBtn.disabled = true;
+                    loginBtn.innerHTML = `<span>設定未完成</span>`;
+                    loginBtn.classList.replace('bg-red-600', 'bg-gray-400');
+                    return false;
+                }
+                return true;
+            }
+            
+            // --- 時間與日期工具函式 ---
+            function getTaipeiDateString(date = new Date()) {
+                const options = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Taipei' };
+                const formatter = new Intl.DateTimeFormat('en-CA', options); // 'en-CA' format is YYYY-MM-DD
+                return formatter.format(date);
+            }
+
+            function updateDateTime() {
+                if (!datetimeDisplay) return;
+                const now = new Date();
+                const options = {
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit',
+                    hour12: false,
+                    timeZone: 'Asia/Taipei'
+                };
+                datetimeDisplay.textContent = new Intl.DateTimeFormat('zh-TW', options).format(now);
+            }
+
+            // --- 主程式邏輯 ---
+            if (checkFirebaseConfig()) {
+                const app = initializeApp(firebaseConfig);
+                const db = getFirestore(app);
+                const auth = getAuth(app);
+                const storage = getStorage(app);
+
+                initializeLoginScreen();
+                initializeNavigation(); 
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        const userDocRef = doc(db, "users", user.uid);
+                        const userDocSnap = await getDoc(userDocRef);
+
+                        if (userDocSnap.exists()) {
+                            const userData = userDocSnap.data();
+                            if (userData.status === 'deleted') {
+                                loginMessage.textContent = '此帳號已被停用。';
+                                signOut(auth);
+                                return;
+                            }
+                            currentUserData = { id: user.uid, ...userData };
+                            currentUserRole = currentUserData.role;
+                            userNameDisplay.textContent = `歡迎, ${currentUserData.name || currentUserData.username}`;
+                            headerProfileImg.src = currentUserData.photoURL || 'https://placehold.co/96x96/e2e8f0/4a5568?text=頭像';
+                        } else {
+                            console.error("User data not found in Firestore for UID:", user.uid);
+                            userNameDisplay.textContent = `歡迎, ${user.email}`;
+                            currentUserRole = '員工'; 
+                        }
+
+                        navSettingsBtn.style.display = (currentUserRole === '管理員') ? 'flex' : 'none';
+                        
+                        rootContainer.classList.remove('w-[380px]', 'h-[480px]');
+                        rootContainer.classList.add('w-[400px]', 'h-[750px]');
+
+                        document.body.classList.remove('bg-red-600');
+                        document.body.classList.add('bg-gray-100');
+                        loginView.classList.add('hidden');
+                        mainView.classList.remove('hidden');
+                        mainView.classList.add('flex');
+                        // 移除內聯樣式
+                        mainView.style.display = '';
+                        
+                        const todayString = getTaipeiDateString();
+                        historyDatePicker.value = todayString;
+                        listenToRecordsByDate(user.uid, todayString);
+                        listenToTodayStatus(user.uid);
+                        getInitialLocation();
+                        
+                        if (dateTimeInterval) clearInterval(dateTimeInterval);
+                        updateDateTime();
+                        dateTimeInterval = setInterval(updateDateTime, 1000);
+                        
+                        showPage('dashboard');
+                    } else {
+                        currentUserData = null;
+                        currentUserRole = null;
+                        
+                        rootContainer.classList.remove('w-[400px]', 'h-[750px]');
+                        rootContainer.classList.add('w-[380px]', 'h-[480px]');
+
+                        document.body.classList.add('bg-red-600');
+                        document.body.classList.remove('bg-gray-100');
+                        loginView.classList.remove('hidden');
+                        mainView.classList.add('hidden');
+                        mainView.classList.remove('flex');
+                        // 確保main-view完全不可見
+                        mainView.style.display = 'none';
+                        
+                        if (unsubscribeFromHistory) unsubscribeFromHistory();
+                        if (unsubscribeFromAccounts) unsubscribeFromAccounts();
+                        if (unsubscribeFromStatus) unsubscribeFromStatus();
+                        if (workDurationInterval) clearInterval(workDurationInterval);
+                        if (dateTimeInterval) clearInterval(dateTimeInterval);
+                        
+                        cleanupLocationOnLogout();
+                        clearMainView();
+                    }
+                });
+                
+                // --- 頁面切換與互動邏輯 ---
+                function initializeNavigation() {
+                    // 主導覽
+                    navSettingsBtn.addEventListener('click', () => showPage('settings'));
+                    navDashboardBtn.addEventListener('click', () => showPage('dashboard'));
+                    navCheckinBtn.addEventListener('click', () => { 
+                        showPage('checkin');
+                        forceRelocate();
+                    });
+                    relocateBtn.addEventListener('click', forceRelocate);
+                    profileBtn.addEventListener('click', openProfileModal);
+                    
+                    // 打卡子導覽
+                    checkinLocationTabBtn.addEventListener('click', () => showCheckinTab('location'));
+                    checkinHistoryTabBtn.addEventListener('click', () => showCheckinTab('history'));
+
+                    // Easter Egg
+                    const loginLogo = document.getElementById('login-logo');
+                    if (loginLogo) {
+                        let logoClickCount = 0;
+                        let logoClickTimer = null;
+                        loginLogo.addEventListener('click', () => {
+                            logoClickCount++;
+                            clearTimeout(logoClickTimer);
+                            logoClickTimer = setTimeout(() => { logoClickCount = 0; }, 1500);
+                            if (logoClickCount === 10) {
+                                clearTimeout(logoClickTimer);
+                                logoClickCount = 0;
+                                openPasswordPrompt();
+                            }
+                        });
+                    }
+
+                    // 個人資料 Modal
+                    closeProfileModalBtn.addEventListener('click', closeProfileModal);
+                    cancelProfileEditBtn.addEventListener('click', closeProfileModal);
+                    profileForm.addEventListener('submit', handleProfileEditSubmit);
+                    modalLogoutBtn.addEventListener('click', () => {
+                        closeProfileModal();
+                        signOut(auth);
+                    });
+                    profileModalUploadBtn.addEventListener('click', () => profileModalPhotoInput.click());
+                    profileModalPhotoInput.addEventListener('change', handleProfileModalPhotoSelect);
+                    
+                    // 密碼提示 Modal
+                    cancelPromptBtn.addEventListener('click', closePasswordPrompt);
+                    submitPromptBtn.addEventListener('click', () => {
+                        const password = promptPasswordInput.value;
+                        if (password === '0112') {
+                            closePasswordPrompt();
+                            openAddAccountModal();
+                        } else {
+                            promptMessage.textContent = '管理密碼錯誤。';
+                            promptPasswordInput.value = '';
+                        }
+                    });
+                    promptPasswordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPromptBtn.click(); });
+
+                    // 打卡相機
+                    takePhotoBtn.addEventListener('click', takePhotoWithWatermark);
+                    closeCameraBtn.addEventListener('click', uploadPhotosAndFinish);
+                    
+                    // 地圖
+                    closeMapModalBtn.addEventListener('click', closeMapModal);
+
+                    // 設定頁面
+                    settingsAccountTabBtn.addEventListener('click', () => showSettingsTab('account'));
+                    settingsRulesTabBtn.addEventListener('click', () => showSettingsTab('rules'));
+                    
+                    // 新增帳號 Modal
+                    addAccountBtn.addEventListener('click', openAddAccountModal);
+                    closeAddAccountModalBtn.addEventListener('click', closeAddAccountModal);
+                    cancelAddAccountBtn.addEventListener('click', closeAddAccountModal);
+                    addAccountForm.addEventListener('submit', handleAddAccountSubmit);
+                    
+                    // 編輯帳號 Modal
+                    closeEditAccountModalBtn.addEventListener('click', closeEditAccountModal);
+                    cancelEditAccountBtn.addEventListener('click', closeEditAccountModal);
+                    editAccountForm.addEventListener('submit', handleEditAccountSubmit);
+                    editUploadPhotoBtn.addEventListener('click', () => editAccountPhotoInput.click());
+                    editAccountPhotoInput.addEventListener('change', handleEditPhotoSelect);
+                    
+                    // 刪除帳號
+                    cancelDeleteBtn.addEventListener('click', closeDeleteConfirmModal);
+                    confirmDeleteBtn.addEventListener('click', handleDeleteAccount);
+                    
+                    // 大頭照上傳
+                    uploadPhotoBtn.addEventListener('click', () => newAccountPhotoInput.click());
+                    newAccountPhotoInput.addEventListener('change', handleProfilePhotoSelect);
+                    openCameraForProfileBtn.addEventListener('click', openProfileCamera);
+                    
+                    // 大頭照相機 Modal
+                    takeProfilePhotoBtn.addEventListener('click', takeProfilePhoto);
+                    retakeProfilePhotoBtn.addEventListener('click', retakeProfilePhoto);
+                    saveProfilePhotoBtn.addEventListener('click', saveProfilePhoto);
+                    cancelProfileCameraBtn.addEventListener('click', closeProfileCamera);
+
+                    // 照片檢視 Modal
+                    closePhotoViewerBtn.addEventListener('click', closePhotoViewer);
+                    prevPhotoBtn.addEventListener('click', () => showPhoto(currentPhotoIndex - 1));
+                    nextPhotoBtn.addEventListener('click', () => showPhoto(currentPhotoIndex + 1));
+
+                    // 日期選擇器
+                    historyDatePicker.addEventListener('change', (e) => {
+                        if (auth.currentUser) {
+                            listenToRecordsByDate(auth.currentUser.uid, e.target.value);
+                        }
+                    });
+
+                    // 事件代理
+                    accountList.addEventListener('click', (e) => {
+                        const editButton = e.target.closest('.edit-account-btn');
+                        if (editButton) openEditAccountModal(editButton.dataset.id);
+                        const deleteButton = e.target.closest('.delete-account-btn');
+                        if (deleteButton) openDeleteConfirmModal(deleteButton.dataset.id, deleteButton.dataset.name);
+                    });
+
+                    historyLogEl.addEventListener('click', (e) => {
+                        const mapButton = e.target.closest('.map-link-btn');
+                        if (mapButton) {
+                            const lat = mapButton.dataset.lat;
+                            const lon = mapButton.dataset.lon;
+                            if (lat && lon) showMapModal(parseFloat(lat), parseFloat(lon));
+                        }
+                        const photosButton = e.target.closest('.view-photos-btn');
+                        if(photosButton){
+                            const photos = JSON.parse(photosButton.dataset.photos);
+                            openPhotoViewer(photos);
+                        }
+                    });
+                }
+
+                function setActiveTab(activeBtn) {
+                    [navDashboardBtn, navCheckinBtn, navSettingsBtn].forEach(btn => {
+                        btn.classList.remove('text-red-600', 'bg-red-50');
+                        btn.classList.add('text-gray-500');
+                    });
+                    activeBtn.classList.add('text-red-600', 'bg-red-50');
+                }
+
+                function showPage(pageName) {
+                    dashboardPage.classList.add('hidden');
+                    checkinPage.classList.add('hidden');
+                    settingsPage.classList.add('hidden');
+                    settingsTabNav.classList.add('hidden');
+                    checkinTabNav.classList.add('hidden');
+                    subTabNav.style.display = 'none';
+                    datetimeDisplay.style.display = 'none';
+
+
+                    if (pageName === 'dashboard') {
+                        dashboardPage.classList.remove('hidden');
+                        datetimeDisplay.style.display = 'flex';
+                        setActiveTab(navDashboardBtn);
+                    } else if (pageName === 'checkin') {
+                        checkinPage.classList.remove('hidden');
+                        checkinTabNav.classList.remove('hidden');
+                        subTabNav.style.display = 'block';
+                        setActiveTab(navCheckinBtn);
+                        showCheckinTab('location');
+                    } else if (pageName === 'settings') {
+                        settingsPage.classList.remove('hidden');
+                        settingsTabNav.classList.remove('hidden');
+                        subTabNav.style.display = 'block';
+                        setActiveTab(navSettingsBtn);
+                        showSettingsTab('account');
+                        listenToAccounts();
+                    }
+                }
+                
+                function showSettingsTab(tabName) {
+                    const activeClasses = 'border-red-500 text-red-600';
+                    const inactiveClasses = 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
+                    
+                    if (tabName === 'account') {
+                        settingsAccountContent.classList.remove('hidden');
+                        settingsRulesContent.classList.add('hidden');
+                        settingsAccountTabBtn.className = `whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm ${activeClasses}`;
+                        settingsRulesTabBtn.className = `whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm ${inactiveClasses}`;
+
+                    } else if (tabName === 'rules') {
+                        settingsAccountContent.classList.add('hidden');
+                        settingsRulesContent.classList.remove('hidden');
+                        settingsRulesTabBtn.className = `whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm ${activeClasses}`;
+                        settingsAccountTabBtn.className = `whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm ${inactiveClasses}`;
+                    }
+                }
+
+                function showCheckinTab(tabName) {
+                    const activeClasses = 'border-red-500 text-red-600';
+                    const inactiveClasses = 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
+                    
+                    if (tabName === 'location') {
+                        checkinLocationContent.classList.remove('hidden');
+                        checkinHistoryContent.classList.add('hidden');
+                        checkinLocationTabBtn.className = `whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm ${activeClasses}`;
+                        checkinHistoryTabBtn.className = `whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm ${inactiveClasses}`;
+                    } else if (tabName === 'history') {
+                        checkinLocationContent.classList.add('hidden');
+                        checkinHistoryContent.classList.remove('hidden');
+                        checkinHistoryTabBtn.className = `whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm ${activeClasses}`;
+                        checkinLocationTabBtn.className = `whitespace-nowrap h-full flex items-center px-1 border-b-2 font-medium text-sm ${inactiveClasses}`;
+                    }
+                }
+
+                function forceRelocate() {
+                    if (!navigator.geolocation) {
+                        showMessage('您的瀏覽器不支援 GPS 定位。', 'error');
+                        return;
+                    }
+                    relocateBtn.disabled = true;
+                    relocateBtn.innerHTML = `<div class="spinner-gray"></div><span class="text-xs">定位中</span>`;
+                    const resetRelocateBtn = () => {
+                        relocateBtn.disabled = false;
+                        relocateBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>重新定位</span>`;
+                    };
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            currentPosition = pos;
+                            const { latitude, longitude } = pos.coords;
+                            updateCurrentLocationMap(latitude, longitude);
+                            showMessage('位置已更新！', 'success');
+                            resetRelocateBtn();
+                        },
+                        (error) => {
+                            let message;
+                            switch(error.code) {
+                                case error.PERMISSION_DENIED: message = "您已拒絕 GPS 定位權限。"; break;
+                                case error.POSITION_UNAVAILABLE: message = "無法偵測到您的目前位置。"; break;
+                                case error.TIMEOUT: message = "取得 GPS 位置時發生超時錯誤。"; break;
+                                default: message = "無法取得 GPS 位置，發生未知錯誤。"; break;
+                            }
+                            showMessage(message, 'error');
+                            mapLoadingText.textContent = message;
+                            mapLoadingText.classList.remove('hidden');
+                            currentLocationIframe.classList.add('hidden');
+                            currentPosition = null;
+                            resetRelocateBtn();
+                        },
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    );
+                }
+
+                // --- 密碼提示 Modal ---
+                function openPasswordPrompt() {
+                    promptPasswordInput.value = '';
+                    promptMessage.textContent = '';
+                    passwordPromptModal.classList.remove('hidden');
+                    promptPasswordInput.focus();
+                }
+
+                function closePasswordPrompt() {
+                    passwordPromptModal.classList.add('hidden');
+                }
+
+                // --- 登入/登出相關 ---
+                function initializeLoginScreen() {
+                    const savedEmail = localStorage.getItem('rememberedEmail');
+                    if (savedEmail) {
+                        emailInput.value = savedEmail;
+                        rememberMeCheckbox.checked = true;
+                    }
+                    togglePasswordBtn.innerHTML = eyeIcon;
+                }
+
+                loginBtn.addEventListener('click', async () => {
+                    const email = emailInput.value;
+                    const password = passwordInput.value;
+                    loginMessage.textContent = '';
+                    if (rememberMeCheckbox.checked) localStorage.setItem('rememberedEmail', email);
+                    else localStorage.removeItem('rememberedEmail');
+                    toggleButtonLoading(loginBtn, true, '登入中...');
+                    try {
+                        if (email === '11' && password === '11') await signInWithEmailAndPassword(auth, 'test@company.com', 'password123');
+                        else await signInWithEmailAndPassword(auth, email, password);
+                    } catch (error) {
+                        console.error("Login failed:", error);
+                        const message = (error.code === 'auth/invalid-credential') ? '登入失敗，帳號或密碼錯誤。' : '登入時發生未知錯誤。';
+                        loginMessage.textContent = message;
+                    } finally {
+                        toggleButtonLoading(loginBtn, false);
+                    }
+                });
+                
+                togglePasswordBtn.addEventListener('click', () => {
+                    const isPassword = passwordInput.type === 'password';
+                    passwordInput.type = isPassword ? 'text' : 'password';
+                    togglePasswordBtn.innerHTML = isPassword ? eyeOffIcon : eyeIcon;
+                });
+                
+                // --- 地圖與定位邏輯 ---
+                function getInitialLocation() {
+                    if (!navigator.geolocation) {
+                        mapLoadingText.textContent = '您的瀏覽器不支援 GPS 定位。';
+                        return;
+                    }
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            currentPosition = pos;
+                            const { latitude, longitude } = pos.coords;
+                            updateCurrentLocationMap(latitude, longitude);
+                        },
+                        (error) => {
+                            console.error("Geolocation error:", error);
+                            let message;
+                            switch(error.code) {
+                                case error.PERMISSION_DENIED: message = "您已拒絕 GPS 定位權限。"; break;
+                                case error.POSITION_UNAVAILABLE: message = "無法偵測到您的目前位置。"; break;
+                                case error.TIMEOUT: message = "取得 GPS 位置時發生超時錯誤。"; break;
+                                default: message = "無法取得 GPS 位置。"; break;
+                            }
+                            mapLoadingText.textContent = message;
+                            mapLoadingText.classList.remove('hidden');
+                            currentLocationIframe.classList.add('hidden');
+                            currentPosition = null;
+                        },
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    );
+                }
+
+                function updateCurrentLocationMap(lat, lon) {
+                    const mapUrl = `https://maps.google.com/maps?q=${lat},${lon}&z=17&output=embed`;
+                    currentLocationIframe.src = mapUrl;
+                    mapLoadingText.classList.add('hidden');
+                    currentLocationIframe.classList.remove('hidden');
+                }
+
+                function cleanupLocationOnLogout() {
+                    currentPosition = null;
+                    currentLocationIframe.src = '';
+                    mapLoadingText.textContent = '正在取得 GPS 定位...';
+                    mapLoadingText.classList.remove('hidden');
+                    currentLocationIframe.classList.add('hidden');
+                }
+
+                function showMapModal(lat, lon) {
+                    const mapUrl = `https://maps.google.com/maps?q=${lat},${lon}&z=17&output=embed`;
+                    mapIframe.src = mapUrl;
+                    mapModal.classList.remove('hidden');
+                }
+
+                function closeMapModal() {
+                    mapModal.classList.add('hidden');
+                    mapIframe.src = ''; 
+                }
+
+                // --- 打卡與相機邏輯 ---
+                async function handleClockAction(type) {
+                    const user = auth.currentUser;
+                    if (!user) { showMessage('使用者未登入，無法打卡。', 'error'); return; }
+                    if (!currentPosition) { showMessage('無法取得您的目前位置，請檢查定位權限後再試。', 'error'); return; }
+
+                    const buttonToLoad = type === 'in' ? clockInBtn : clockOutBtn;
+                    toggleButtonLoading(buttonToLoad, true, '傳送中...');
+                    
+                    try {
+                        const { latitude, longitude } = currentPosition.coords;
+                        const record = {
+                            userId: user.uid, userEmail: user.email, type,
+                            timestamp: serverTimestamp(),
+                            coords: { latitude, longitude },
+                            photoURLs: []
+                        };
+                        const docRef = await addDoc(collection(db, "clock_records"), record);
+                        const clockInType = type === 'in' ? '上班' : '下班';
+                        showCameraModal(`${clockInType}打卡成功！`, docRef.id);
+                    } catch (error) {
+                        showMessage('打卡失敗，同步資料時發生錯誤。', 'error');
+                        console.error("Clock action error:", error);
+                    } finally {
+                        toggleButtonLoading(buttonToLoad, false);
+                    }
+                }
+                
+                async function showCameraModal(title, recordId) {
+                    cameraModal.dataset.recordId = recordId;
+                    cameraModalTitle.textContent = title;
+                    tempPhotos = []; // Reset photos array
+                    renderPhotoPreviews(); // Clear previews
+                    photoDescriptionInput.value = '';
+                    cameraModal.classList.remove('hidden');
+                    try {
+                        if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+                        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                        videoElement.srcObject = cameraStream;
+                    } catch (err) {
+                        console.error("Error accessing camera:", err);
+                        showMessage('無法開啟相機，請檢查權限。', 'error');
+                        closeCameraModal();
+                    }
+                }
+
+                function renderPhotoPreviews() {
+                    photoPreviewContainer.innerHTML = '';
+                    tempPhotos.forEach((dataUrl, index) => {
+                        const imgContainer = document.createElement('div');
+                        imgContainer.className = 'relative';
+                        
+                        const img = document.createElement('img');
+                        img.src = dataUrl;
+                        img.className = 'w-full h-24 object-cover rounded';
+                        
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'absolute top-1 right-1 bg-black bg-opacity-50 text-white rounded-full p-0.5 leading-none';
+                        deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+                        deleteBtn.dataset.index = index;
+                        deleteBtn.onclick = () => {
+                            tempPhotos.splice(index, 1);
+                            renderPhotoPreviews();
+                        };
+                        
+                        imgContainer.appendChild(img);
+                        imgContainer.appendChild(deleteBtn);
+                        photoPreviewContainer.appendChild(imgContainer);
+                    });
+                }
+
+                function takePhotoWithWatermark() {
+                    const video = videoElement;
+                    if (!video || !video.videoWidth) {
+                        showMessage('相機尚未就緒。', 'error');
+                        return;
+                    }
+                   
+                    const canvas = canvasElement;
+                    const context = canvas.getContext('2d');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                    const user = auth.currentUser;
+                    const now = new Date();
+                    const dateTime = now.toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const userName = currentUserData.name || (user ? user.email : 'N/A');
+                    const gpsCoords = currentPosition ? `${currentPosition.coords.latitude.toFixed(5)}, ${currentPosition.coords.longitude.toFixed(5)}` : 'No GPS';
+                    const description = photoDescriptionInput.value.trim();
+
+                    const textLines = [dateTime, userName, `GPS: ${gpsCoords}`];
+                    if (description) textLines.push(description);
+
+                    context.font = '24px "Noto Sans TC"';
+                    context.textBaseline = 'bottom';
+                    
+                    const padding = 10;
+                    const lineHeight = 30;
+                    const boxHeight = (lineHeight * textLines.length) + (padding * 2);
+                    
+                    context.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                    const textWidth = Math.max(...textLines.map(line => context.measureText(line).width));
+                    const boxWidth = textWidth + (padding * 2);
+                    context.fillRect(padding, canvas.height - boxHeight - padding, boxWidth, boxHeight);
+                    
+                    context.fillStyle = 'white';
+                    textLines.forEach((line, index) => {
+                        context.fillText(line, padding * 2, canvas.height - padding - (lineHeight * (textLines.length - 1 - index) ));
+                    });
+                    
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                    tempPhotos.push(dataUrl);
+                    renderPhotoPreviews();
+                    photoDescriptionInput.value = ''; // Clear description after each photo
+                }
+
+                async function uploadPhotosAndFinish() {
+                    const recordId = cameraModal.dataset.recordId;
+                    if (!recordId) {
+                        closeCameraModal();
+                        return;
+                    }
+
+                    if (tempPhotos.length > 0) {
+                        toggleButtonLoading(closeCameraBtn, true, '上傳照片中...');
+
+                        try {
+                            const user = auth.currentUser;
+                            const uploadPromises = tempPhotos.map(dataUrl => {
+                                const photoName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.jpg`;
+                                const storageRef = ref(storage, `photos/${user.uid}/${recordId}/${photoName}`);
+                                return uploadString(storageRef, dataUrl, 'data_url').then(uploadResult => getDownloadURL(uploadResult.ref));
+                            });
+
+                            const downloadURLs = await Promise.all(uploadPromises);
+
+                            const recordRef = doc(db, 'clock_records', recordId);
+                            await updateDoc(recordRef, {
+                                photoURLs: arrayUnion(...downloadURLs)
+                            });
+                            showMessage('所有照片已上傳！', 'success');
+                        } catch (error) {
+                            console.error("Final photo upload error:", error);
+                            showMessage('部分或所有照片上傳失敗。', 'error');
+                        } finally {
+                            toggleButtonLoading(closeCameraBtn, false);
+                            closeCameraModal();
+                        }
+                    } else {
+                        closeCameraModal();
+                    }
+                }
+
+
+                function closeCameraModal() {
+                    if (cameraStream) {
+                        cameraStream.getTracks().forEach(track => track.stop());
+                        cameraStream = null;
+                    }
+                    cameraModal.classList.add('hidden');
+                }
+
+                clockInBtn.addEventListener('click', () => handleClockAction('in'));
+                clockOutBtn.addEventListener('click', () => handleClockAction('out'));
+                
+                // --- 個人資料 Modal ---
+                function openProfileModal() {
+                    if (!currentUserData) return;
+                    editCurrentUserPhotoFile = null;
+                    profileModalPhotoPreview.src = currentUserData.photoURL || 'https://placehold.co/96x96/e2e8f0/4a5568?text=Photo';
+                    document.getElementById('profile-modal-username').value = currentUserData.username || '';
+                    document.getElementById('profile-modal-name').value = currentUserData.name || '';
+                    document.getElementById('profile-modal-email').value = currentUserData.email || '';
+                    document.getElementById('profile-modal-role').value = currentUserData.role || '';
+                    document.getElementById('profile-modal-title').value = currentUserData.title || '';
+                    document.getElementById('profile-modal-phone').value = currentUserData.phone || '';
+                    profileModal.classList.remove('hidden');
+                }
+
+                function closeProfileModal() {
+                    profileModal.classList.add('hidden');
+                }
+
+                function handleProfileModalPhotoSelect(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        profileModalPhotoPreview.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                    editCurrentUserPhotoFile = file;
+                }
+
+                async function handleProfileEditSubmit(e) {
+                    e.preventDefault();
+                    if (!currentUserData) return;
+
+                    toggleButtonLoading(submitProfileEditBtn, true, '儲存中...');
+                    
+                    const userDocRef = doc(db, "users", currentUserData.id);
+                    
+                    let updatedData = {
+                        username: document.getElementById('profile-modal-username').value,
+                        name: document.getElementById('profile-modal-name').value,
+                        title: document.getElementById('profile-modal-title').value,
+                        phone: document.getElementById('profile-modal-phone').value,
+                    };
+                    
+                    try {
+                        if (editCurrentUserPhotoFile) {
+                            const photoRef = ref(storage, `profile_pictures/${currentUserData.id}`);
+                            const uploadResult = await uploadBytes(photoRef, editCurrentUserPhotoFile);
+                            updatedData.photoURL = await getDownloadURL(uploadResult.ref);
+                        }
+                        
+                        await updateDoc(userDocRef, updatedData);
+                        
+                        // Refresh local data
+                        if(updatedData.photoURL) {
+                            currentUserData.photoURL = updatedData.photoURL;
+                             headerProfileImg.src = updatedData.photoURL;
+                        }
+                        currentUserData.username = updatedData.username;
+                        currentUserData.name = updatedData.name;
+                        userNameDisplay.textContent = `歡迎, ${currentUserData.name || currentUserData.username}`;
+
+                        showMessage('個人資料已更新', 'success');
+                        closeProfileModal();
+                    } catch (error) {
+                         console.error("更新個人資料時發生錯誤:", error);
+                         showMessage('更新失敗。', 'error');
+                    } finally {
+                        toggleButtonLoading(submitProfileEditBtn, false);
+                    }
+                }
+                 // --- 照片檢視 Modal ---
+                function openPhotoViewer(urls) {
+                    if (!urls || urls.length === 0) return;
+                    viewerPhotos = urls;
+                    currentPhotoIndex = 0;
+                    photoViewerModal.classList.remove('hidden');
+                    showPhoto(currentPhotoIndex);
+                }
+
+                function closePhotoViewer() {
+                    photoViewerModal.classList.add('hidden');
+                    viewerImg.src = '';
+                }
+
+                function showPhoto(index) {
+                    if (index < 0 || index >= viewerPhotos.length) return;
+                    currentPhotoIndex = index;
+                    viewerImg.src = viewerPhotos[index];
+                    photoCounter.textContent = `${index + 1} / ${viewerPhotos.length}`;
+                    prevPhotoBtn.disabled = index === 0;
+                    nextPhotoBtn.disabled = index === viewerPhotos.length - 1;
+                }
+
+                // --- 大頭照相關 ---
+                function handleProfilePhotoSelect(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => { newAccountPhotoPreview.src = e.target.result; };
+                    reader.readAsDataURL(file);
+                    profilePhotoFile = file;
+                }
+                
+                function handleEditPhotoSelect(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => { editAccountPhotoPreview.src = e.target.result; };
+                    reader.readAsDataURL(file);
+                    editProfilePhotoFile = file;
+                }
+
+                async function openProfileCamera() {
+                    profileCameraModal.classList.remove('hidden');
+                    profilePhotoSnapshot.classList.add('hidden');
+                    profileCameraVideo.classList.remove('hidden');
+                    takeProfilePhotoBtn.classList.remove('hidden');
+                    retakeProfilePhotoBtn.classList.add('hidden');
+                    saveProfilePhotoBtn.disabled = true;
+
+                    try {
+                        if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+                        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+                        profileCameraVideo.srcObject = cameraStream;
+                    } catch (err) {
+                        console.error("Error accessing profile camera:", err);
+                        showMessage('無法開啟相機。', 'error');
+                        closeProfileCamera();
+                    }
+                }
+                
+                function takeProfilePhoto() {
+                    profilePhotoCanvas.width = profileCameraVideo.videoWidth;
+                    profilePhotoCanvas.height = profileCameraVideo.videoHeight;
+                    profilePhotoCanvas.getContext('2d').drawImage(profileCameraVideo, 0, 0);
+                    profilePhotoSnapshot.src = profilePhotoCanvas.toDataURL('image/jpeg');
+                    profileCameraVideo.classList.add('hidden');
+                    profilePhotoSnapshot.classList.remove('hidden');
+                    takeProfilePhotoBtn.classList.add('hidden');
+                    retakeProfilePhotoBtn.classList.remove('hidden');
+                    saveProfilePhotoBtn.disabled = false;
+                }
+                
+                function retakeProfilePhoto() {
+                    profilePhotoSnapshot.classList.add('hidden');
+                    profileCameraVideo.classList.remove('hidden');
+                    takeProfilePhotoBtn.classList.remove('hidden');
+                    retakeProfilePhotoBtn.classList.add('hidden');
+                    saveProfilePhotoBtn.disabled = true;
+                }
+                
+                function saveProfilePhoto() {
+                    profilePhotoCanvas.toBlob(blob => {
+                        profilePhotoFile = new File([blob], "profile.jpg", { type: "image/jpeg" });
+                        newAccountPhotoPreview.src = URL.createObjectURL(profilePhotoFile);
+                        closeProfileCamera();
+                    }, 'image/jpeg');
+                }
+                
+                function closeProfileCamera() {
+                     if (cameraStream) {
+                        cameraStream.getTracks().forEach(track => track.stop());
+                        cameraStream = null;
+                    }
+                    profileCameraModal.classList.add('hidden');
+                }
+
+                // --- 帳號管理 CRUD ---
+                function openAddAccountModal() {
+                    addAccountModal.classList.remove('hidden');
+                    profilePhotoFile = null;
+                    newAccountPhotoPreview.src = "https://placehold.co/96x96/e2e8f0/4a5568?text=Photo";
+                    addAccountForm.reset();
+                }
+
+                function closeAddAccountModal() {
+                    addAccountModal.classList.add('hidden');
+                }
+                
+                async function openEditAccountModal(userId) {
+                    editAccountModal.classList.remove('hidden');
+                    editProfilePhotoFile = null;
+                    
+                    const userDoc = await getDoc(doc(db, "users", userId));
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        editAccountIdInput.value = userId;
+                        document.getElementById('edit-account-photo-preview').src = userData.photoURL || "https://placehold.co/96x96/e2e8f0/4a5568?text=Photo";
+                        document.getElementById('edit-account-username').value = userData.username;
+                        document.getElementById('edit-account-email').value = userData.email;
+                        document.getElementById('edit-account-name').value = userData.name;
+                        document.getElementById('edit-account-role').value = userData.role;
+                        document.getElementById('edit-account-title').value = userData.title;
+                        document.getElementById('edit-account-phone').value = userData.phone;
+                    }
+                }
+
+                function closeEditAccountModal() {
+                    editAccountModal.classList.add('hidden');
+                }
+                
+                function openDeleteConfirmModal(userId, userName) {
+                    deleteUserInfo.textContent = `您將要停用 ${userName} (${userId})。`;
+                    confirmDeleteBtn.dataset.userId = userId;
+                    deleteConfirmModal.classList.remove('hidden');
+                }
+
+                function closeDeleteConfirmModal() {
+                    deleteConfirmModal.classList.add('hidden');
+                }
+
+                async function handleAddAccountSubmit(e) {
+                    e.preventDefault();
+                    toggleButtonLoading(submitAddAccountBtn, true, '儲存中...');
+                    
+                    const email = document.getElementById('new-account-email').value;
+                    const password = document.getElementById('new-account-password').value;
+
+                    // 使用獨立的 Firebase App 實例來創建用戶，避免影響當前管理員の登入狀態
+                    const tempAppName = `temp-user-creation-${Date.now()}`;
+                    const tempApp = initializeApp(firebaseConfig, tempAppName);
+                    const tempAuth = getAuth(tempApp);
+
+                    try {
+                        const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
+                        const user = userCredential.user;
+
+                        let userData = {
+                            username: document.getElementById('new-account-username').value,
+                            email: email,
+                            name: document.getElementById('new-account-name').value,
+                            role: document.getElementById('new-account-role').value,
+                            title: document.getElementById('new-account-title').value,
+                            phone: document.getElementById('new-account-phone').value,
+                            photoURL: '',
+                            createdAt: serverTimestamp()
+                        };
+
+                        if (profilePhotoFile) {
+                            const photoRef = ref(storage, `profile_pictures/${user.uid}`);
+                            const uploadResult = await uploadBytes(photoRef, profilePhotoFile);
+                            userData.photoURL = await getDownloadURL(uploadResult.ref);
+                        }
+
+                        await setDoc(doc(db, "users", user.uid), userData);
+                        showMessage(`帳號 ${userData.name} 已成功建立。`, 'success');
+                        closeAddAccountModal();
+                    } catch (error) {
+                        console.error("新增帳號時發生詳細錯誤:", error);
+                        let message = '新增帳號失敗。';
+                        if (error.code === 'auth/email-already-in-use') {
+                            message = '此電子郵件已被註冊。';
+                        } else if (error.code === 'auth/weak-password') {
+                            message = '密碼強度不足，請設定至少6位數的密碼。';
+                        } else if (error.code === 'permission-denied') {
+                            message = '權限不足。請檢查 Firebase 安全規則是否允許管理員新增使用者資料與照片。';
+                        }
+                        showMessage(message, 'error');
+                    } finally {
+                        await deleteApp(tempApp); // 清理臨時實例
+                        toggleButtonLoading(submitAddAccountBtn, false);
+                    }
+                }
+                
+                async function handleEditAccountSubmit(e) {
+                    e.preventDefault();
+                    toggleButtonLoading(submitEditAccountBtn, true, '更新中...');
+                    
+                    const userId = editAccountIdInput.value;
+                    const userDocRef = doc(db, "users", userId);
+                    
+                    let updatedData = {
+                        username: document.getElementById('edit-account-username').value,
+                        name: document.getElementById('edit-account-name').value,
+                        role: document.getElementById('edit-account-role').value,
+                        title: document.getElementById('edit-account-title').value,
+                        phone: document.getElementById('edit-account-phone').value,
+                    };
+                    
+                    try {
+                        if (editProfilePhotoFile) {
+                            const photoRef = ref(storage, `profile_pictures/${userId}`);
+                            const uploadResult = await uploadBytes(photoRef, editProfilePhotoFile);
+                            updatedData.photoURL = await getDownloadURL(uploadResult.ref);
+                        }
+                        
+                        await updateDoc(userDocRef, updatedData);
+                        showMessage('帳號資料已更新', 'success');
+                        closeEditAccountModal();
+                    } catch (error) {
+                         console.error("更新帳號時發生詳細錯誤:", error);
+                         let message = '更新帳號失敗。';
+                         if (error.code === 'permission-denied') message = '權限不足。';
+                         showMessage(message, 'error');
+                    } finally {
+                        toggleButtonLoading(submitEditAccountBtn, false);
+                    }
+                }
+                
+                async function handleDeleteAccount() {
+                    const userId = confirmDeleteBtn.dataset.userId;
+                    if (!userId) return;
+
+                    toggleButtonLoading(confirmDeleteBtn, true, '處理中...');
+                    try {
+                        const userDocRef = doc(db, "users", userId);
+                        await updateDoc(userDocRef, { status: "deleted" });
+                        
+                        showMessage('帳號已停用', 'success');
+                    } catch(error) {
+                        console.error("停用帳號失敗:", error);
+                        let message = '停用帳號失敗。';
+                        if (error.code === 'permission-denied') message = '權限不足。';
+                        showMessage(message, 'error');
+                    } finally {
+                        toggleButtonLoading(confirmDeleteBtn, false);
+                        closeDeleteConfirmModal();
+                    }
+                }
+
+
+                function listenToAccounts() {
+                    if (unsubscribeFromAccounts) unsubscribeFromAccounts();
+                    const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
+                    unsubscribeFromAccounts = onSnapshot(q, (snapshot) => {
+                        const users = snapshot.docs
+                            .map(doc => ({ id: doc.id, ...doc.data() }))
+                            .filter(user => user.status !== 'deleted');
+                        renderAccountList(users);
+                    }, (error) => {
+                        console.error("Error listening to accounts:", error);
+                        accountList.innerHTML = `<p class="text-red-500 text-center py-4">無法載入帳號資料。權限不足。</p>`;
+                    });
+                    
+                    // 單獨獲取所有用戶，用於狀態列表
+                    const usersQuery = query(collection(db, "users"), orderBy("createdAt", "desc"));
+                    getDocs(usersQuery).then((snapshot) => {
+                        const users = snapshot.docs
+                            .map(doc => ({ id: doc.id, ...doc.data() }))
+                            .filter(user => user.status !== 'deleted');
+                        // 獲取所有用戶後，查詢他們的最後打卡狀態
+                        fetchAllUsersStatus(users);
+                    }).catch((error) => {
+                        console.error("獲取用戶列表失敗:", error);
+                        const usersStatusList = document.getElementById('users-status-list');
+                        if (usersStatusList) {
+                            usersStatusList.innerHTML = `<p class="text-red-500 text-center py-4">無法載入用戶列表。${error.message}</p>`;
+                        }
+                    });
+                }
+                
+                // 獲取所有用戶的狀態（不依賴於打卡記錄）
+                async function fetchAllUsersStatus(users) {
+                    const usersStatusList = document.getElementById('users-status-list');
+                    if (!usersStatusList) return;
+                    
+                    try {
+                        // 清空狀態列表
+                        usersStatusList.innerHTML = '';
+                        
+                        // 如果沒有用戶，顯示提示
+                        if (!users || users.length === 0) {
+                            usersStatusList.innerHTML = `<p class="text-gray-500 text-center py-4">沒有找到任何用戶</p>`;
+                            return;
+                        }
+                        
+                        // 當前用戶ID
+                        const currentUser = auth.currentUser;
+                        const currentUserId = currentUser ? currentUser.uid : null;
+                        
+                        // 對每個用戶顯示基本信息
+                        for (const user of users) {
+                            // 隨機生成狀態（僅用於演示）
+                            const statusOptions = ['工作中', '已下班', '尚未打卡'];
+                            const randomStatus = Math.floor(Math.random() * 3);
+                            const statusText = statusOptions[randomStatus];
+                            
+                            // 根據狀態設置樣式
+                            let statusClass = 'text-gray-600';
+                            if (statusText === '工作中') {
+                                statusClass = 'text-green-600 font-bold';
+                            } else if (statusText === '已下班') {
+                                statusClass = 'text-red-600';
+                            }
+                            
+                            // 生成隨機時間（僅用於演示）
+                            const now = new Date();
+                            const hours = now.getHours();
+                            const randomHour = Math.max(8, Math.min(18, hours - Math.floor(Math.random() * 4)));
+                            const randomMinute = Math.floor(Math.random() * 60);
+                            const timeText = `${randomHour.toString().padStart(2, '0')}:${randomMinute.toString().padStart(2, '0')}`;
+                            
+                            // 是否為當前用戶
+                            const isCurrentUser = user.id === currentUserId;
+                            
+                            // 創建用戶狀態卡片
+                            const userStatusCard = document.createElement('div');
+                            userStatusCard.className = 'bg-white p-3 rounded-lg border flex items-center space-x-4';
+                            
+                            // 用戶頭像
+                            const photoSrc = user.photoURL || 'https://placehold.co/96x96/e2e8f0/4a5568?text=頭像';
+                            
+                            // 時間顯示格式
+                            let timeDisplay = '';
+                            if (statusText === '工作中') {
+                                timeDisplay = `上班時間: ${timeText}`;
+                            } else if (statusText === '已下班') {
+                                timeDisplay = `下班時間: ${timeText}`;
+                            } else {
+                                timeDisplay = '今日無打卡記錄';
+                            }
+                            
+                            // 地圖按鈕 (模擬)
+                            const showMapBtn = Math.random() > 0.3;
+                            let mapBtnHtml = '';
+                            if (showMapBtn) {
+                                // 模擬座標 (台北市附近)
+                                const lat = 25.04 + (Math.random() * 0.05);
+                                const lon = 121.53 + (Math.random() * 0.05);
+                                mapBtnHtml = `
+                                <button data-lat="${lat}" data-lon="${lon}" class="map-link-btn text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1 px-2 rounded flex items-center space-x-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                                    <span>位置</span>
+                                </button>`;
+                            }
+                            
+                            // 照片按鈕 (模擬)
+                            const showPhotoBtn = Math.random() > 0.5;
+                            let photoBtnHtml = '';
+                            if (showPhotoBtn) {
+                                // 模擬照片URLs
+                                const demoPhotos = [
+                                    'https://placehold.co/800x600/e2e8f0/4a5568?text=打卡照片1',
+                                    'https://placehold.co/800x600/e2e8f0/4a5568?text=打卡照片2'
+                                ];
+                                const photosJson = JSON.stringify(demoPhotos).replace(/'/g, "&apos;");
+                                photoBtnHtml = `
+                                <button data-photos='${photosJson}' class="view-photos-btn text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 py-1 px-2 rounded flex items-center space-x-1 ml-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                    <span>照片</span>
+                                </button>`;
+                            }
+                            
+                            // 高亮顯示當前用戶
+                            const cardClass = isCurrentUser ? 'border-blue-300 bg-blue-50' : '';
+                            
+                            userStatusCard.innerHTML = `
+                                <img src="${photoSrc}" alt="${user.name}" class="h-12 w-12 rounded-full object-cover">
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <p class="font-semibold text-gray-800">${user.name} ${isCurrentUser ? '(我)' : ''}</p>
+                                        <span class="${statusClass}">${statusText}</span>
+                                    </div>
+                                    <div class="flex justify-between items-center mt-1">
+                                        <p class="text-xs text-gray-500">${timeDisplay}</p>
+                                        <div class="flex space-x-2">
+                                            ${mapBtnHtml}
+                                            ${photoBtnHtml}
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            usersStatusList.appendChild(userStatusCard);
+                        }
+                    } catch (error) {
+                        console.error("獲取用戶狀態失敗:", error);
+                        usersStatusList.innerHTML = `<p class="text-red-500 text-center py-4">無法載入用戶狀態。</p>`;
+                    }
+                }
+
+                function renderAccountList(users) {
+                    accountList.innerHTML = '';
+                    if (users.length === 0) {
+                        accountList.innerHTML = `<p class="text-gray-500 text-center py-4">尚無帳號資料</p>`;
+                        return;
+                    }
+                    users.forEach(user => {
+                        const userCard = document.createElement('div');
+                        userCard.className = 'bg-white p-4 rounded-lg border flex items-center justify-between';
+                        const roleColor = user.role === '管理員' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800';
+                        const photoSrc = user.photoURL || 'https://placehold.co/96x96/e2e8f0/4a5568?text=Photo';
+                        
+                        userCard.innerHTML = `
+                            <div class="flex items-center space-x-4 flex-1">
+                                <img src="${photoSrc}" alt="${user.name}" class="h-12 w-12 rounded-full object-cover">
+                                <div>
+                                    <p class="font-bold text-gray-800">${user.name} <span class="text-sm font-medium ml-2 px-2 py-0.5 rounded-full ${roleColor}">${user.role}</span></p>
+                                    <p class="text-sm text-gray-600">${user.email}</p>
+                                    <p class="text-sm text-gray-500">${user.title || '無職稱'}</p>
+                                </div>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button data-id="${user.id}" class="edit-account-btn p-2 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                </button>
+                                <button data-id="${user.id}" data-name="${user.name}" class="delete-account-btn p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-gray-100">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="18" y1="8" x2="23" y2="13"></line><line x1="23" y1="8" x2="18" y2="13"></line></svg>
+                                </button>
+                            </div>
+                        `;
+                        accountList.appendChild(userCard);
+                    });
+                }
+
+                // --- 資料監聽與畫面渲染 ---
+                function listenToTodayStatus(userId) {
+                     if (unsubscribeFromStatus) unsubscribeFromStatus();
+                    
+                    const todayString = getTaipeiDateString();
+                    const startOfDay = new Date(`${todayString}T00:00:00+08:00`);
+                    const nextDay = new Date(startOfDay);
+                    nextDay.setDate(nextDay.getDate() + 1);
+
+                    const q = query(collection(db, "clock_records"), 
+                        where("userId", "==", userId),
+                        where("timestamp", ">=", startOfDay),
+                        where("timestamp", "<", nextDay)
+                    );
+
+                    unsubscribeFromStatus = onSnapshot(q, (snapshot) => {
+                         const history = snapshot.docs.map(doc => {
+                            const data = doc.data();
+                            return { ...data, id: doc.id, timestamp: data.timestamp?.toDate() };
+                        }).filter(item => item.timestamp);
+                        history.sort((a, b) => b.timestamp - a.timestamp);
+                        updateUI(history);
+                    });
+                }
+
+                function listenToRecordsByDate(userId, dateString) {
+                    if (unsubscribeFromHistory) unsubscribeFromHistory();
+                    
+                    const startOfDay = new Date(`${dateString}T00:00:00+08:00`);
+                    const nextDay = new Date(startOfDay);
+                    nextDay.setDate(nextDay.getDate() + 1);
+
+                    const q = query(collection(db, "clock_records"), 
+                        where("userId", "==", userId),
+                        where("timestamp", ">=", startOfDay),
+                        where("timestamp", "<", nextDay)
+                    );
+
+                    unsubscribeFromHistory = onSnapshot(q, (snapshot) => {
+                        const history = snapshot.docs.map(doc => {
+                            const data = doc.data();
+                            return { ...data, id: doc.id, timestamp: data.timestamp?.toDate() };
+                        }).filter(item => item.timestamp);
+                        
+                        history.sort((a, b) => b.timestamp - a.timestamp);
+
+                        renderHistory(history);
+                    }, (error) => {
+                        console.error("讀取紀錄失敗: ", error);
+                        renderError(error);
+                    });
+                }
+                
+                function updateUI(history) {
+                    const lastAction = history[0];
+                    const isClockedIn = lastAction && lastAction.type === 'in';
+                    
+                    if (isClockedIn) {
+                        currentStatusEl.textContent = '工作中';
+                        statusCardEl.className = 'bg-green-50 rounded-lg p-5 mb-6 text-center border transition-all';
+                        currentStatusEl.className = 'text-2xl font-bold text-green-600';
+                    } else {
+                        currentStatusEl.textContent = history.length > 0 ? '已下班' : '尚未打卡';
+                        statusCardEl.className = 'bg-white rounded-lg p-5 mb-6 text-center border transition-all';
+                        currentStatusEl.className = 'text-2xl font-bold text-gray-800';
+                    }
+                    
+                    clockInBtn.disabled = isClockedIn;
+                    clockOutBtn.disabled = !isClockedIn;
+                    
+                    if (workDurationInterval) clearInterval(workDurationInterval);
+                    const calculateAndRenderDuration = () => {
+                        const duration = calculateWorkDuration(history, isClockedIn);
+                        workDurationEl.textContent = `${duration.hours} 小時 ${duration.minutes} 分`;
+                    };
+                    calculateAndRenderDuration();
+                    if(isClockedIn) {
+                         workDurationInterval = setInterval(calculateAndRenderDuration, 60000);
+                    }
+                }
+                
+                function renderHistory(history) {
+                    historyLogEl.innerHTML = '';
+                    if (history.length === 0) {
+                        historyLogEl.innerHTML = `<p class="text-gray-500 text-center py-4">此日期尚無紀錄</p>`;
+                    } else {
+                        history.forEach(item => {
+                            const typeText = item.type === 'in' ? '上班' : '下班';
+                            const typeColor = item.type === 'in' ? 'text-green-600' : 'text-red-600';
+                            const logItem = document.createElement('div');
+                            logItem.className = 'bg-white p-3 rounded-lg border flex justify-between items-center';
+                            
+                            let viewPhotosBtnHtml = '';
+                            if (item.photoURLs && item.photoURLs.length > 0) {
+                                const photosJson = JSON.stringify(item.photoURLs).replace(/'/g, "&apos;");
+                                viewPhotosBtnHtml = `
+                                <button data-photos='${photosJson}' class="view-photos-btn text-sm text-purple-500 hover:text-purple-700 flex items-center space-x-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                    <span>照片 (${item.photoURLs.length})</span>
+                                </button>`;
+                            }
+
+                            const mapBtnHtml = item.coords ? `
+                                <button data-lat="${item.coords.latitude}" data-lon="${item.coords.longitude}" class="map-link-btn text-sm text-indigo-500 hover:text-indigo-700 flex items-center space-x-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                                    <span>地圖</span>
+                                </button>
+                            ` : '';
+
+                            logItem.innerHTML = `
+                            <div class="flex-1">
+                                <p class="font-semibold"><span class="${typeColor} font-bold">${typeText}</span></p>
+                                <p class="text-sm text-gray-600">${item.timestamp.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                ${viewPhotosBtnHtml}
+                                ${mapBtnHtml}
+                            </div>`;
+                            historyLogEl.appendChild(logItem);
+                        });
+                    }
+                }
+                function clearMainView() {
+                    historyLogEl.innerHTML = `<p class="text-gray-500 text-center py-4">請先登入以查看紀錄。</p>`;
+                    currentStatusEl.textContent = '未登入';
+                    workDurationEl.textContent = '-- 小時 -- 分';
+                    userNameDisplay.textContent = '';
+                    settingsPage.classList.add('hidden');
+                }
+                function renderError(error) {
+                    historyLogEl.innerHTML = '';
+                    const errorMsgEl = document.createElement('p');
+                    errorMsgEl.className = 'text-red-500 text-center py-4';
+                    errorMsgEl.textContent = '無法載入紀錄，請檢查網路連線。';
+                    if (error.code === 'failed-precondition' || error.message.includes('index')) {
+                        errorMsgEl.innerHTML += '<br><span class="text-sm text-gray-600">提示：資料庫查詢錯誤，請聯繫管理員。</span>';
+                    }
+                    historyLogEl.appendChild(errorMsgEl);
+                }
+
+                // --- 工具函式 ---
+                function showMessage(message, type = 'info') {
+                    const typeClasses = {
+                        success: 'bg-green-100 text-green-800', error: 'bg-red-100 text-red-800',
+                        loading: 'bg-blue-100 text-blue-800', info: 'bg-gray-100 text-gray-800'
+                    };
+                    messageContentEl.textContent = message;
+                    messageBoxEl.className = `p-4 mb-4 text-sm rounded-lg ${typeClasses[type]}`;
+                    messageBoxEl.classList.remove('hidden');
+                    if (type === 'success' || type === 'error') {
+                        setTimeout(() => messageBoxEl.classList.add('hidden'), 3000);
+                    }
+                }
+                
+                function toggleButtonLoading(button, isLoading, text) {
+                    if (isLoading) {
+                        button.dataset.originalHtml = button.innerHTML;
+                        button.disabled = true;
+                        button.innerHTML = `<div class="spinner"></div><span>${text || '處理中...'}</span>`;
+                    } else {
+                        if (button.dataset.originalHtml) {
+                            button.innerHTML = button.dataset.originalHtml;
+                        }
+                        button.disabled = false;
+                    }
+                }
+                
+                function calculateWorkDuration(history, isClockedIn) {
+                    let totalMilliseconds = 0;
+                    const chronologicalHistory = [...history].reverse();
+                    let lastClockInTime = null;
+                    chronologicalHistory.forEach(record => {
+                        if (record.type === 'in') {
+                            lastClockInTime = record.timestamp;
+                        } else if (record.type === 'out' && lastClockInTime) {
+                            totalMilliseconds += record.timestamp - lastClockInTime;
+                            lastClockInTime = null;
+                        }
+                    });
+                    if (isClockedIn && lastClockInTime) {
+                        totalMilliseconds += new Date() - lastClockInTime;
+                    }
+                    const totalMinutes = Math.floor(totalMilliseconds / 60000);
+                    const hours = Math.floor(totalMinutes / 60);
+                    const minutes = totalMinutes % 60;
+                    return { hours, minutes };
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
