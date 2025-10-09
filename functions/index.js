@@ -4,95 +4,116 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 
 /**
- * Cloud Function to create a new user with Authentication and Firestore profile.
- * - This function must be called by an authenticated user.
- * - The calling user must have the '管理員' role in their Firestore profile.
+ * Checks if the calling user is an admin.
+ * @param {object} context - The function context.
+ * @throws {HttpsError} If the user is not an authenticated admin.
  */
-exports.createUser = functions.https.onCall(async (data, context) => {
-  // 1. Authorization Check: Ensure the caller is an authenticated admin.
+const ensureAdmin = async (context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
-      "此操作需要管理員權限，請先登入。",
+      "此操作需要權限，請先登入。",
     );
   }
-
-  const adminUid = context.auth.uid;
-  const adminDocRef = admin.firestore().collection("users").doc(adminUid);
-
-  try {
-    const adminDoc = await adminDocRef.get();
-    if (!adminDoc.exists || adminDoc.data().role !== "管理員") {
-      throw new functions.https.HttpsError(
-        "permission-denied",
-        "權限不足，只有管理員可以建立新帳號。",
-      );
-    }
-  } catch (error) {
+  const adminDoc = await admin.firestore().collection("users").doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== "管理員") {
     throw new functions.https.HttpsError(
-      "internal",
-      "驗證管理員身份時發生錯誤。",
+      "permission-denied",
+      "權限不足，只有管理員可以執行此操作。",
     );
   }
+};
 
-  // 2. Data Validation: Ensure all required fields are present.
+/**
+ * Creates a new user in Firebase Auth and a corresponding profile in Firestore.
+ */
+exports.createUser = functions.https.onCall(async (data, context) => {
+  await ensureAdmin(context);
+
   const {email, password, name, role, title, communities} = data;
   if (!email || !password || !name || !role || !title) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "請求中缺少必要欄位 (姓名、信箱、密碼、角色、職稱)。",
-    );
+    throw new functions.https.HttpsError("invalid-argument", "缺少必要欄位。");
   }
 
-  // 3. Create User in Firebase Authentication.
-  let userRecord;
   try {
-    userRecord = await admin.auth().createUser({
+    const userRecord = await admin.auth().createUser({
       email: email,
       password: password,
       displayName: name,
     });
-  } catch (error) {
-    // Handle common auth errors
-    if (error.code === "auth/email-already-exists") {
-      throw new functions.https.HttpsError(
-        "already-exists",
-        "此電子郵件已被註冊。",
-      );
-    }
-    if (error.code === "auth/invalid-password") {
-      throw new functions.https.HttpsError(
-        "invalid-argument",
-        "密碼格式無效，長度至少需6個字元。",
-      );
-    }
-    // For other errors
-    throw new functions.https.HttpsError("internal", "建立認證用戶時發生錯誤。");
-  }
 
-  // 4. Create User Profile in Firestore.
-  const newUserProfile = {
-    email: email,
-    name: name,
-    role: role,
-    title: title,
-    communities: communities || [], // Ensure communities is an array
-  };
+    await admin.firestore().collection("users").doc(userRecord.uid).set({
+      email: email,
+      name: name,
+      role: role,
+      title: title,
+      communities: communities || [],
+    });
+
+    return {success: true, uid: userRecord.uid};
+  } catch (error) {
+    if (error.code === "auth/email-already-exists") {
+      throw new functions.https.HttpsError("already-exists", "此電子郵件已被註冊。");
+    }
+    throw new functions.https.HttpsError("internal", "建立使用者時發生錯誤。");
+  }
+});
+
+
+/**
+ * Updates an existing user's profile in Firestore and optionally their auth details.
+ */
+exports.updateUser = functions.https.onCall(async (data, context) => {
+    await ensureAdmin(context);
+
+    const {uid, name, role, title, communities, password} = data;
+    if (!uid || !name || !role || !title) {
+        throw new functions.https.HttpsError("invalid-argument", "缺少必要欄位 (uid, name, role, title)。");
+    }
+
+    try {
+        // Update Firestore document
+        await admin.firestore().collection("users").doc(uid).update({
+            name: name,
+            role: role,
+            title: title,
+            communities: communities || [],
+        });
+
+        // Update Auth if password is provided
+        const authUpdates = {displayName: name};
+        if (password) {
+            authUpdates.password = password;
+        }
+        await admin.auth().updateUser(uid, authUpdates);
+
+        return {success: true};
+    } catch (error) {
+        console.error("Error updating user:", error);
+        throw new functions.https.HttpsError("internal", "更新使用者時發生錯誤。");
+    }
+});
+
+
+/**
+ * Deletes a user from Firebase Auth and their profile from Firestore.
+ */
+exports.deleteUser = functions.https.onCall(async (data, context) => {
+  await ensureAdmin(context);
+
+  const {uid} = data;
+  if (!uid) {
+    throw new functions.https.HttpsError("invalid-argument", "缺少使用者 UID。");
+  }
 
   try {
-    await admin
-      .firestore()
-      .collection("users")
-      .doc(userRecord.uid)
-      .set(newUserProfile);
+    // Delete from Auth first
+    await admin.auth().deleteUser(uid);
+    // Then delete from Firestore
+    await admin.firestore().collection("users").doc(uid).delete();
+    return {success: true};
   } catch (error) {
-    // This is a critical error, might need manual cleanup if it fails
-    throw new functions.https.HttpsError(
-      "internal",
-      "儲存使用者設定檔至資料庫時發生錯誤。",
-    );
+    console.error("Error deleting user:", error);
+    throw new functions.https.HttpsError("internal", "刪除使用者時發生錯誤。");
   }
-
-  // 5. Return Success.
-  return {success: true, uid: userRecord.uid};
 });
