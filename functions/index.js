@@ -14,92 +14,77 @@ const ensureAdmin = async (context) => {
   }
 };
 
-exports.createUser = functions.region('us-central1').https.onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            // Manually verify token
-            const idToken = req.headers.authorization.split('Bearer ')[1];
-            const decodedToken = await admin.auth().verifyIdToken(idToken);
-            
-            // Re-create context for ensureAdmin
-            const context = { auth: { uid: decodedToken.uid } };
-            await ensureAdmin(context);
+exports.createUser = functions.region('us-central1').https.onCall(async (data, context) => {
+    await ensureAdmin(context);
 
-            const {email, password, name, role, title, communities} = req.body.data;
-            if (!email || !password || !name || !role || !title) {
-                return res.status(400).json({ error: { message: "缺少必要欄位。" } });
-            }
+    const {email, password, name, role, title, communities} = data;
+    if (!email || !password || !name || !role || !title) {
+        throw new functions.https.HttpsError("invalid-argument", "缺少必要欄位。");
+    }
 
-            const userRecord = await admin.auth().createUser({
-                email: email,
-                password: password,
-                displayName: name,
-            });
+    try {
+        const userRecord = await admin.auth().createUser({
+            email: email,
+            password: password,
+            displayName: name,
+        });
 
-            await admin.firestore().collection("users").doc(userRecord.uid).set({
-                email: email, name: name, role: role, title: title, communities: communities || [],
-            });
+        await admin.firestore().collection("users").doc(userRecord.uid).set({
+            email: email, name: name, role: role, title: title, communities: communities || [],
+        });
 
-            res.json({ data: { success: true, uid: userRecord.uid } });
-        } catch (error) {
-            console.error("Error creating user:", error);
-            const errorMessage = error.code === 'auth/email-already-exists' ? '此電子郵件已被註冊。' : '建立使用者時發生錯誤。';
-            res.status(500).json({ error: { message: errorMessage } });
+        return { success: true, uid: userRecord.uid };
+    } catch (error) {
+        if (error.code === "auth/email-already-exists") {
+            throw new functions.https.HttpsError("already-exists", "此電子郵件已被註冊。");
         }
-    });
+        throw new functions.https.HttpsError("internal", "建立使用者時發生錯誤。");
+    }
 });
 
-exports.updateUser = functions.region('us-central1').https.onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            const idToken = req.headers.authorization.split('Bearer ')[1];
-            const decodedToken = await admin.auth().verifyIdToken(idToken);
-            const context = { auth: { uid: decodedToken.uid } };
-            await ensureAdmin(context);
 
-            const {uid, name, role, title, communities, password} = req.body.data;
-            if (!uid || !name || !role || !title) {
-                return res.status(400).json({ error: { message: "缺少必要欄位 (uid, name, role, title)。" } });
-            }
+exports.updateUser = functions.region('us-central1').https.onCall(async (data, context) => {
+    await ensureAdmin(context);
 
-            await admin.firestore().collection("users").doc(uid).update({
-                name: name, role: role, title: title, communities: communities || [],
-            });
+    const {uid, name, role, title, communities, password} = data;
+    if (!uid || !name || !role || !title) {
+        throw new functions.https.HttpsError("invalid-argument", "缺少必要欄位 (uid, name, role, title)。");
+    }
 
-            const authUpdates = {displayName: name};
-            if (password) {
-                authUpdates.password = password;
-            }
-            await admin.auth().updateUser(uid, authUpdates);
+    try {
+        await admin.firestore().collection("users").doc(uid).update({
+            name: name, role: role, title: title, communities: communities || [],
+        });
 
-            res.json({ data: { success: true } });
-        } catch (error) {
-            console.error("Error updating user:", error);
-            res.status(500).json({ error: { message: "更新使用者時發生錯誤。" } });
+        const authUpdates = {displayName: name};
+        if (password) {
+            authUpdates.password = password;
         }
-    });
+        await admin.auth().updateUser(uid, authUpdates);
+
+        return { success: true };
+    } catch (error) {
+        console.error("Error updating user:", error);
+        throw new functions.https.HttpsError("internal", "更新使用者時發生錯誤。");
+    }
 });
 
-exports.deleteUser = functions.region('us-central1').https.onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            const idToken = req.headers.authorization.split('Bearer ')[1];
-            const decodedToken = await admin.auth().verifyIdToken(idToken);
-            const context = { auth: { uid: decodedToken.uid } };
-            await ensureAdmin(context);
 
-            const {uid} = req.body.data;
-            if (!uid) {
-                return res.status(400).json({ error: { message: "缺少使用者 UID。" } });
-            }
-            
-            await admin.auth().deleteUser(uid);
-            await admin.firestore().collection("users").doc(uid).delete();
+exports.deleteUser = functions.region('us-central1').https.onCall(async (data, context) => {
+    await ensureAdmin(context);
 
-            res.json({ data: { success: true } });
-        } catch (error) {
-            console.error("Error deleting user:", error);
-            res.status(500).json({ error: { message: "刪除使用者時發生錯誤。" } });
-        }
-    });
+    const {uid} = data;
+    if (!uid) {
+        throw new functions.https.HttpsError("invalid-argument", "缺少使用者 UID。");
+    }
+
+    try {
+        await admin.auth().deleteUser(uid);
+        await admin.firestore().collection("users").doc(uid).delete();
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting user:", error);
+        throw new functions.https.HttpsError("internal", "刪除使用者時發生錯誤。");
+    }
 });
+
