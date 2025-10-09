@@ -713,14 +713,27 @@
             if(password) userData.password = password;
 
             try {
-                if (isEditing) {
-                    userData.uid = editingUserIdInput.value;
-                    const updateUser = httpsCallable(functions, 'updateUser');
-                    await updateUser(userData);
-                } else {
-                    const createUser = httpsCallable(functions, 'createUser');
-                    await createUser(userData);
+                const token = await auth.currentUser.getIdToken();
+                const endpoint = isEditing 
+                    ? `https://us-central1-nw-patrol.cloudfunctions.net/updateUser`
+                    : `https://us-central1-nw-patrol.cloudfunctions.net/createUser`;
+                
+                if(isEditing) userData.uid = editingUserIdInput.value;
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ data: userData })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error.message || '操作失敗');
                 }
+                
                 hideAddUserModal();
             } catch (error) {
                 console.error("Function call failed:", error);
@@ -742,7 +755,7 @@
 
             document.getElementById('user-name-input').value = user.name;
             document.getElementById('user-email-input').value = user.email;
-            document.getElementById('user-email-input').disabled = true; // Cannot change email for simplicity
+            document.getElementById('user-email-input').disabled = true;
             document.getElementById('user-title-input').value = user.title;
             document.getElementById('user-role-select').value = user.role;
             
@@ -761,14 +774,24 @@
             }
             if (confirm(`確定要刪除帳號 "${userName}" 嗎？此操作將永久移除該使用者。`)) {
                 try {
-                    const deleteUserFunc = httpsCallable(functions, 'deleteUser');
-                    await deleteUserFunc({ uid: userId });
+                    const token = await auth.currentUser.getIdToken();
+                    const response = await fetch('https://us-central1-nw-patrol.cloudfunctions.net/deleteUser', {
+                         method: 'POST',
+                         headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ data: { uid: userId } })
+                    });
+                     if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error.message || '刪除失敗');
+                    }
                 } catch (error) {
                     alert("刪除失敗：" + error.message);
                 }
             }
         }
-
 
         function loadCommunitiesForAdmin() {
             const q = query(collection(db, "communities"), orderBy("name"));
