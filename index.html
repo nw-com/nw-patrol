@@ -376,7 +376,6 @@
         const nfcScanModal = document.getElementById('nfc-scan-modal');
         
         // NFC Modal Elements
-        const nfcStatusCard = document.getElementById('nfc-status-card');
         const nfcIconContainer = document.getElementById('nfc-icon-container');
         const nfcStatusText = document.getElementById('nfc-status-text');
         const nfcHintText = document.getElementById('nfc-hint-text');
@@ -394,13 +393,20 @@
             if (user) {
                 const userDocSnap = await getDoc(doc(db, "users", user.uid));
                 if (userDocSnap.exists()) {
-                    currentUserProfile = { id: user.uid, ...userDocSnap.data() };
+                    const userData = userDocSnap.data();
+                    currentUserProfile = {
+                        id: user.uid,
+                        ...userData,
+                        communities: Array.isArray(userData.communities) ? userData.communities : []
+                    };
                     userNameDisplay.textContent = currentUserProfile.name || '使用者';
                     setupUIForUser(currentUserProfile);
                     loginPage.classList.add('hidden');
                     appContainer.classList.remove('hidden');
                     appContainer.classList.add('flex');
                     showPage('home');
+                    currentPatrol = { community: null, schedule: null, sessionLogs: [], completedPoints: new Set() };
+                    renderPatrolLog();
                 } else {
                     loginError.textContent = '找不到使用者設定檔。';
                     await signOut(auth);
@@ -819,12 +825,13 @@
         
         // --- 巡邏頁面邏輯 ---
         function loadPatrolCommunities() {
-            if (!currentUserProfile || !currentUserProfile.communities || currentUserProfile.communities.length === 0) {
+            const userCommunities = currentUserProfile?.communities;
+            if (!userCommunities || !Array.isArray(userCommunities) || userCommunities.length === 0) {
                 patrolCommunitySelection.innerHTML = `<p class="text-center text-gray-500">您尚未被指派任何社區。</p>`;
                 return;
             }
             patrolCommunitySelection.innerHTML = '';
-            currentUserProfile.communities.forEach(async (communityId) => {
+            userCommunities.forEach(async (communityId) => {
                 const docSnap = await getDoc(doc(db, "communities", communityId));
                 if (docSnap.exists()) {
                     const community = { id: docSnap.id, ...docSnap.data() };
@@ -848,6 +855,7 @@
             backBtn.onclick = () => {
                 patrolCommunitySelection.classList.remove('hidden');
                 patrolScheduleSelection.classList.add('hidden');
+                headerTitle.textContent = '巡邏打卡';
             };
             patrolScheduleSelection.appendChild(backBtn);
 
@@ -869,9 +877,9 @@
         function startPatrol(community, schedule) {
             currentPatrol = { community, schedule, sessionLogs: [], completedPoints: new Set() };
             patrolScheduleSelection.classList.add('hidden');
-            patrolMainView.classList.add('hidden'); // Hide it first to ensure map initializes correctly
             patrolMainView.classList.remove('hidden');
             patrolMainView.classList.add('flex');
+            headerTitle.textContent = community.name;
             
             setTimeout(() => {
                 if (patrolMap) patrolMap.remove();
@@ -884,7 +892,11 @@
                 community.patrolPoints.forEach(point => {
                     const marker = L.marker([point.lat, point.lng]).addTo(patrolMap)
                         .bindPopup(`<b>${point.name} (${point.id})</b><br>${point.description}`);
-                    marker.on('click', () => showNfcScanModal(point));
+                    marker.on('click', () => {
+                        if (!currentPatrol.completedPoints.has(point.id)) {
+                            showNfcScanModal(point);
+                        }
+                    });
                     marker.pointData = point;
                     activePatrolPointMarkers.push(marker);
                 });
@@ -895,6 +907,7 @@
         backToScheduleBtn.addEventListener('click', () => {
             patrolMainView.classList.add('hidden');
             patrolScheduleSelection.classList.remove('hidden');
+            headerTitle.textContent = '巡邏打卡';
         });
         
         patrolTabButtons.forEach(btn => {
@@ -910,7 +923,7 @@
                 if (tab === 'map') {
                     patrolMapTab.classList.remove('hidden');
                     patrolLogTab.classList.add('hidden');
-                    patrolMap.invalidateSize(); // Important for map to resize correctly
+                    if (patrolMap) patrolMap.invalidateSize();
                 } else {
                     patrolMapTab.classList.add('hidden');
                     patrolLogTab.classList.remove('hidden');
