@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>西北保全巡邏打卡系統</title>
+    <title>保全巡邏打卡系統</title>
     <!-- 引入 Tailwind CSS 以進行快速美化 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -82,13 +82,15 @@
         const noLogMessage = document.getElementById('no-log-message');
         const statusCard = document.getElementById('status-card');
         const iconContainer = document.getElementById('icon-container');
-        const statusIcon = document.getElementById('status-icon');
-
+        
         let logEntries = [];
         let lastScannedSerial = null;
         let lastScanTime = 0;
         let uiTimeoutId = null;
         const COOLDOWN_PERIOD_MS = 3000; // 為同一個標籤設定3秒的冷卻時間
+
+        let isScanning = false;
+        let abortController;
 
         // 圖示 SVG
         const ICONS = {
@@ -140,7 +142,6 @@
                     const infoDiv = document.createElement('div');
                     const idElement = document.createElement('p');
                     idElement.className = 'font-semibold text-gray-800';
-                    // 這裡我們假設NFC標籤的內容是文字
                     idElement.textContent = `巡邏點: ${entry.location}`;
                     
                     const timeElement = document.createElement('p');
@@ -160,72 +161,89 @@
             }
         }
 
-        // 處理NFC讀取
-        async function startNFC() {
-            if (!('NDEFReader' in window)) {
-                updateStatus('ERROR', '此瀏覽器不支援 Web NFC', '請使用支援的瀏覽器，例如 Android Chrome');
-                return;
-            }
+        // 切換掃描狀態 (開始/停止)
+        async function toggleScan() {
+            if (isScanning) {
+                // --- 停止掃描的邏輯 ---
+                if (abortController) {
+                    abortController.abort();
+                }
+            } else {
+                // --- 開始掃描的邏輯 ---
+                if (!('NDEFReader' in window)) {
+                    updateStatus('ERROR', '此瀏覽器不支援 Web NFC', '請使用支援的瀏覽器，例如 Android Chrome');
+                    return;
+                }
 
-            try {
-                const reader = new NDEFReader();
-                await reader.scan();
-                
-                updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤');
-
-                reader.addEventListener('reading', ({ message, serialNumber }) => {
-                    const currentTime = Date.now();
-                    // 如果在冷卻時間內掃描同一個標籤，則忽略
-                    if (serialNumber === lastScannedSerial && (currentTime - lastScanTime < COOLDOWN_PERIOD_MS)) {
-                        return;
-                    }
+                try {
+                    const reader = new NDEFReader();
+                    abortController = new AbortController();
                     
-                    // 更新最後掃描紀錄
-                    lastScannedSerial = serialNumber;
-                    lastScanTime = currentTime;
+                    isScanning = true;
+                    scanButton.textContent = '取消掃描';
+                    scanButton.classList.replace('bg-blue-500', 'bg-yellow-500');
+                    scanButton.classList.replace('hover:bg-blue-600', 'hover:bg-yellow-600');
+                    updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤');
 
-                    // 假設NFC標籤裡儲存的是NDEF格式的文字紀錄
-                    const decoder = new TextDecoder();
-                    let location = "未知地點";
-                    if (message.records.length > 0) {
-                        location = decoder.decode(message.records[0].data);
-                    }
-                    
-                    const now = new Date();
-                    const newEntry = {
-                        location: location,
-                        timestamp: now.toLocaleString('zh-TW'),
-                        serialNumber: serialNumber,
+                    abortController.signal.onabort = () => {
+                        isScanning = false;
+                        scanButton.textContent = '開始巡邏掃描';
+                        scanButton.classList.replace('bg-yellow-500', 'bg-blue-500');
+                        scanButton.classList.replace('hover:bg-yellow-600', 'hover:bg-blue-600');
+                        updateStatus('IDLE', '掃描已取消', '點擊按鈕以重新開始');
+                        clearTimeout(uiTimeoutId); // 清除可能存在的UI計時器
                     };
                     
-                    logEntries.push(newEntry);
-                    saveToLocalStorage();
-                    renderLog();
-                    
-                    // 清除上一個UI更新計時器，避免狀態錯亂
-                    clearTimeout(uiTimeoutId);
-                    
-                    updateStatus('SUCCESS', `打卡成功: ${location}`, '可以繼續掃描下一個巡邏點');
-                    
-                    // 震動提示
-                    if ('vibrate' in navigator) {
-                        navigator.vibrate(200);
+                    await reader.scan({ signal: abortController.signal });
+
+                    reader.addEventListener('reading', ({ message, serialNumber }) => {
+                        const currentTime = Date.now();
+                        if (serialNumber === lastScannedSerial && (currentTime - lastScanTime < COOLDOWN_PERIOD_MS)) {
+                            return; // 忽略同一個標籤在冷卻時間內的重複讀取
+                        }
+                        
+                        lastScannedSerial = serialNumber;
+                        lastScanTime = currentTime;
+
+                        const decoder = new TextDecoder();
+                        let location = "未知地點";
+                        if (message.records.length > 0) {
+                            location = decoder.decode(message.records[0].data);
+                        }
+                        
+                        const now = new Date();
+                        const newEntry = {
+                            location: location,
+                            timestamp: now.toLocaleString('zh-TW'),
+                            serialNumber: serialNumber,
+                        };
+                        
+                        logEntries.push(newEntry);
+                        saveToLocalStorage();
+                        renderLog();
+                        
+                        clearTimeout(uiTimeoutId);
+                        updateStatus('SUCCESS', `打卡成功: ${location}`, '可以繼續掃描下一個巡邏點');
+                        if ('vibrate' in navigator) navigator.vibrate(200);
+
+                        uiTimeoutId = setTimeout(() => {
+                             if(isScanning) { // 只有在仍在掃描狀態時才恢復UI
+                                updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤');
+                             }
+                        }, COOLDOWN_PERIOD_MS);
+                    });
+
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error('啟動NFC掃描失敗: ', error);
+                        updateStatus('ERROR', '無法啟動NFC掃描', '請確認手機NFC功能已開啟並授予權限');
                     }
-
-                    // 冷卻時間後，將UI恢復為掃描中狀態
-                    uiTimeoutId = setTimeout(() => {
-                         updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤');
-                    }, COOLDOWN_PERIOD_MS);
-                });
-
-                reader.addEventListener('error', (event) => {
-                    console.error('NFC 讀取錯誤: ', event);
-                    updateStatus('ERROR', '讀取錯誤', '請再試一次或檢查NFC功能是否開啟');
-                });
-
-            } catch (error) {
-                console.error('啟動NFC掃描失敗: ', error);
-                updateStatus('ERROR', '無法啟動NFC掃描', '請確認手機NFC功能已開啟並授予權限');
+                     // 不論錯誤為何，都重置狀態
+                    isScanning = false;
+                    scanButton.textContent = '開始巡邏掃描';
+                    scanButton.classList.replace('bg-yellow-500', 'bg-blue-500');
+                    scanButton.classList.replace('hover:bg-yellow-600', 'hover:bg-blue-600');
+                }
             }
         }
 
@@ -245,17 +263,77 @@
 
         // 清除所有紀錄
         clearButton.addEventListener('click', () => {
-            if (confirm('您確定要清除所有打卡紀錄嗎？此操作無法復原。')) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl p-6 w-11/12 max-w-sm text-center">
+                    <p class="text-lg font-semibold mb-4">您確定要清除所有打卡紀錄嗎？</p>
+                    <p class="text-sm text-gray-600 mb-6">此操作無法復原。</p>
+                    <div class="flex justify-center space-x-4">
+                        <button id="confirm-clear" class="bg-red-500 text-white px-6 py-2 rounded-md">確定</button>
+                        <button id="cancel-clear" class="bg-gray-300 text-gray-800 px-6 py-2 rounded-md">取消</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            document.getElementById('confirm-clear').onclick = () => {
                 logEntries = [];
                 saveToLocalStorage();
                 renderLog();
                 updateStatus('IDLE', '紀錄已清除', '可以開始新的巡邏任務');
-            }
+                document.body.removeChild(modal);
+            };
+
+            document.getElementById('cancel-clear').onclick = () => {
+                document.body.removeChild(modal);
+            };
+        });
+        
+        // 將原本的 confirm 對話框替換為自定義的 modal
+        clearButton.addEventListener('click', (e) => {
+            e.preventDefault(); // 阻止預設行為
+            if (document.querySelector('.fixed.inset-0')) return; // 如果 modal 已存在則不重複開啟
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl p-6 w-11/12 max-w-sm text-center transform transition-all scale-95 opacity-0 animate-fade-in-up">
+                    <p class="text-lg font-semibold mb-4">您確定要清除所有打卡紀錄嗎？</p>
+                    <p class="text-sm text-gray-600 mb-6">此操作無法復原。</p>
+                    <div class="flex justify-center space-x-4">
+                        <button id="confirm-clear-btn" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-md transition-colors">確定</button>
+                        <button id="cancel-clear-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-2 rounded-md transition-colors">取消</button>
+                    </div>
+                </div>
+                <style>
+                    @keyframes fade-in-up {
+                        from { opacity: 0; transform: scale(.95) translateY(10px); }
+                        to { opacity: 1; transform: scale(1) translateY(0); }
+                    }
+                    .animate-fade-in-up { animation: fade-in-up 0.2s ease-out forwards; }
+                </style>
+            `;
+            document.body.appendChild(modal);
+
+            const removeModal = () => {
+                modal.remove();
+            };
+
+            document.getElementById('confirm-clear-btn').onclick = () => {
+                logEntries = [];
+                saveToLocalStorage();
+                renderLog();
+                if(!isScanning) {
+                    updateStatus('IDLE', '紀錄已清除', '可以開始新的巡邏任務');
+                }
+                removeModal();
+            };
+            document.getElementById('cancel-clear-btn').onclick = removeModal;
         });
 
-        scanButton.addEventListener('click', startNFC);
+        scanButton.addEventListener('click', toggleScan);
         
-        // 頁面載入時，從 localStorage 載入舊紀錄
         window.addEventListener('load', loadFromLocalStorage);
 
     </script>
