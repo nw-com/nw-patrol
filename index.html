@@ -11,29 +11,47 @@
         body { -webkit-tap-highlight-color: transparent; background-color: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
         .main-container { height: calc(100vh - 40px); width: calc(100vw - 20px); margin: 20px 10px; }
         .page-content { height: calc(100% - 140px); }
-        .nav-btn-active { background-color: #3b82f6; color: white; }
+        .nav-btn-active { background-color: #ef4444; color: white; } /* Red-500 */
         .log-item, .list-item { transition: transform 0.2s; }
         .log-item:hover, .list-item:hover { transform: scale(1.02); }
         /* 隱藏滾動條 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Loading Spinner */
+        .loader { border: 4px solid #f3f3f3; border-radius: 50%; border-top: 4px solid #ef4444; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="flex items-center justify-center">
 
     <!-- 登入頁面 -->
     <div id="login-page" class="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
+        <div class="mx-auto h-12 w-12 text-red-600">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+        </div>
         <h2 class="text-3xl font-bold text-center text-gray-900">西北保全巡邏打卡系統</h2>
         <div>
-            <label for="email" class="text-sm font-medium text-gray-700">帳號 (電子郵件)</label>
-            <input id="email" name="email" type="email" autocomplete="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            <div class="flex items-center justify-between">
+                <label for="email" class="text-sm font-medium text-gray-700">帳號 (電子郵件)</label>
+                <div class="flex items-center">
+                    <input id="remember-me" name="remember-me" type="checkbox" class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
+                    <label for="remember-me" class="ml-2 block text-sm text-gray-900">記住我</label>
+                </div>
+            </div>
+            <input id="email" name="email" type="email" autocomplete="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-red-500 focus:border-red-500">
         </div>
         <div>
             <label for="password" class="text-sm font-medium text-gray-700">密碼</label>
-            <input id="password" name="password" type="password" autocomplete="current-password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            <div class="relative mt-1">
+                <input id="password" name="password" type="password" autocomplete="current-password" required class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-red-500 focus:border-red-500">
+                <button type="button" id="toggle-password" class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700">
+                    <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg id="eye-off-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off hidden"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                </button>
+            </div>
         </div>
-        <p id="login-error" class="text-red-500 text-sm text-center"></p>
-        <button id="login-button" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+        <p id="login-error" class="text-red-500 text-sm text-center h-5"></p>
+        <button id="login-button" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
             登入
         </button>
     </div>
@@ -42,12 +60,21 @@
     <div id="app-container" class="main-container bg-white rounded-xl shadow-2xl flex-col max-w-lg mx-auto overflow-hidden hidden">
         
         <!-- 頁首 -->
-        <header id="app-header" class="flex-shrink-0 flex items-center justify-between p-4" style="height: 70px;">
-            <h1 class="text-2xl font-bold text-gray-800"></h1>
-            <button id="logout-button" class="text-gray-500 hover:text-red-500 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-            </button>
+        <header id="app-header" class="flex-shrink-0 flex items-center justify-between p-4 border-b" style="height: 70px;">
+            <div class="flex items-center gap-3">
+                <div class="h-8 w-8 text-red-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                </div>
+                <h1 class="text-xl font-bold text-gray-900">西北保全巡邏打卡系統</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-sm text-gray-700 whitespace-nowrap">歡迎, <span id="user-name-display" class="font-semibold"></span>!</div>
+                <button id="logout-button" class="text-gray-500 hover:text-red-500 transition-colors" title="登出">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                </button>
+            </div>
         </header>
+
 
         <!-- 頁中 (主要內容區域) -->
         <main class="flex-grow overflow-y-auto p-4 bg-gray-50 no-scrollbar" style="height: calc(100% - 140px);">
@@ -56,7 +83,6 @@
                 <div class="flex flex-col items-center justify-center h-full text-center">
                     <div id="clock-date" class="text-xl text-gray-600"></div>
                     <div id="clock-time" class="text-7xl font-bold text-gray-800 tracking-wider"></div>
-                    <div class="mt-4 text-gray-700">歡迎, <span id="user-name-display" class="font-semibold"></span>!</div>
                 </div>
             </div>
 
@@ -73,7 +99,7 @@
 
                 <!-- 操作按鈕 -->
                 <div class="text-center mb-8">
-                    <button id="scan-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300">
+                    <button id="scan-button" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-300">
                         開始巡邏掃描
                     </button>
                 </div>
@@ -107,8 +133,8 @@
                     <h2 class="text-xl font-semibold text-gray-700 mb-4">社區管理</h2>
                     <div class="bg-white p-4 rounded-lg shadow">
                         <div class="flex gap-2 mb-4">
-                            <input id="community-name-input" type="text" placeholder="輸入新的社區名稱" class="flex-grow border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                            <button id="add-community-button" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">新增</button>
+                            <input id="community-name-input" type="text" placeholder="輸入新的社區名稱" class="flex-grow border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
+                            <button id="add-community-button" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">新增</button>
                         </div>
                         <div id="community-list" class="space-y-2"></div>
                     </div>
@@ -117,10 +143,52 @@
                 <!-- 帳號管理 -->
                 <div>
                     <h2 class="text-xl font-semibold text-gray-700 mb-4">帳號管理</h2>
+                    <!-- 新增帳號表單 -->
+                    <div class="bg-white p-4 rounded-lg shadow mb-6">
+                        <h3 class="text-lg font-medium text-gray-800 mb-4">新增帳號</h3>
+                        <form id="add-user-form" class="space-y-4">
+                            <div>
+                                <label for="user-name-input" class="text-sm font-medium text-gray-700">姓名</label>
+                                <input id="user-name-input" type="text" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
+                            </div>
+                             <div>
+                                <label for="user-email-input" class="text-sm font-medium text-gray-700">帳號 (電子郵件)</label>
+                                <input id="user-email-input" type="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
+                            </div>
+                            <div>
+                                <label for="user-password-input" class="text-sm font-medium text-gray-700">密碼</label>
+                                <input id="user-password-input" type="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
+                            </div>
+                             <div>
+                                <label for="user-title-input" class="text-sm font-medium text-gray-700">職稱</label>
+                                <input id="user-title-input" type="text" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
+                            </div>
+                            <div>
+                                <label for="user-role-select" class="text-sm font-medium text-gray-700">角色</label>
+                                <select id="user-role-select" required class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                                    <option>保全</option>
+                                    <option>總幹事</option>
+                                    <option>高階主管</option>
+                                    <option>管理員</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-sm font-medium text-gray-700">服務社區</label>
+                                <div id="user-communities-checklist" class="mt-2 space-y-2 max-h-32 overflow-y-auto border p-2 rounded-md">
+                                    <p class="text-gray-500">正在載入社區列表...</p>
+                                </div>
+                            </div>
+                            <p id="add-user-error" class="text-red-500 text-sm text-center h-5"></p>
+                            <button type="submit" id="add-user-button" class="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                                <span>建立帳號</span>
+                                <div id="add-user-loader" class="loader ml-3 hidden"></div>
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- 帳號列表 -->
                     <div class="bg-white p-4 rounded-lg shadow">
-                         <p class="text-sm text-gray-600 mb-4">
-                            <strong>重要提示:</strong> 帳號的新增與密碼設定，請至 Firebase 後台操作。此處僅顯示已在 Firestore 建立對應資料的帳號。
-                        </p>
+                         <h3 class="text-lg font-medium text-gray-800 mb-4">現有帳號列表</h3>
                         <div id="user-list" class="space-y-2"></div>
                     </div>
                 </div>
@@ -153,7 +221,8 @@
         // 匯入 Firebase 模組
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, onSnapshot, addDoc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, onSnapshot, addDoc, query, where, orderBy, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
         // --- Firebase 設定 ---
         const firebaseConfig = {
@@ -170,6 +239,7 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const functions = getFunctions(app); // 初始化 Cloud Functions
         
         let currentUserProfile = null;
 
@@ -182,6 +252,10 @@
         const loginError = document.getElementById('login-error');
         const logoutButton = document.getElementById('logout-button');
         const userNameDisplay = document.getElementById('user-name-display');
+        const rememberMeCheckbox = document.getElementById('remember-me');
+        const togglePasswordButton = document.getElementById('toggle-password');
+        const eyeIcon = document.getElementById('eye-icon');
+        const eyeOffIcon = document.getElementById('eye-off-icon');
         
         // --- 導覽相關 ---
         const pageElements = {
@@ -191,7 +265,6 @@
             settings: document.getElementById('page-settings'),
         };
         const navButtons = document.querySelectorAll('.nav-btn');
-        const headerTitle = document.querySelector('#app-header h1');
         
         // --- 巡邏頁面元素 ---
         const scanButton = document.getElementById('scan-button');
@@ -199,7 +272,6 @@
         const statusText = document.getElementById('status-text');
         const hintText = document.getElementById('hint-text');
         const logContainer = document.getElementById('log-container');
-        const noLogMessage = document.getElementById('no-log-message');
         const statusCard = document.getElementById('status-card');
         const iconContainer = document.getElementById('icon-container');
 
@@ -212,7 +284,7 @@
         const COOLDOWN_PERIOD_MS = 3000;
         
         const ICONS = {
-            SCANNING: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scan-line text-blue-500 animate-pulse"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>`,
+            SCANNING: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scan-line text-red-500 animate-pulse"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>`,
             SUCCESS: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle-2 text-green-500"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>`,
             ERROR: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle text-red-500"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>`,
             IDLE: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio-tower text-gray-500"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.24 6.24 0 0 1 0 8.8"/><path d="M10.6 7.6a2.49 2.49 0 0 1 0 3.5"/><path d="M19.1 1.9C23 5.8 23 12.2 19.1 16.1"/><path d="M16.2 4.7a6.24 6.24 0 0 0 0 8.8"/><path d="M13.4 7.6a2.49 2.49 0 0 0 0 3.5"/><path d="M12 22V12"/><path d="m9 12 3-10 3 10"/></svg>`
@@ -250,11 +322,24 @@
             loginError.textContent = '';
             try {
                 await signInWithEmailAndPassword(auth, email, password);
+                if (rememberMeCheckbox.checked) {
+                    localStorage.setItem('rememberedEmail', email);
+                } else {
+                    localStorage.removeItem('rememberedEmail');
+                }
             } catch (error) {
                 loginError.textContent = '帳號或密碼錯誤。';
             }
         });
         logoutButton.addEventListener('click', () => signOut(auth));
+
+        // --- 登入頁功能 ---
+        togglePasswordButton.addEventListener('click', () => {
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            eyeIcon.classList.toggle('hidden');
+            eyeOffIcon.classList.toggle('hidden');
+        });
 
         // --- UI 設定 ---
         function setupUIForUser(profile) {
@@ -275,9 +360,6 @@
             Object.values(pageElements).forEach(page => page.classList.add('hidden'));
             if (pageElements[pageName]) pageElements[pageName].classList.remove('hidden');
 
-            const titles = { home: '首頁', patrol: '巡邏打卡', data: '歷史紀錄', settings: '系統設定' };
-            headerTitle.textContent = titles[pageName] || '保全系統';
-
             navButtons.forEach(btn => btn.classList.toggle('nav-btn-active', btn.dataset.page === pageName));
             
             if (pageName !== 'patrol' && isScanning) abortController.abort();
@@ -297,7 +379,7 @@
             iconContainer.innerHTML = ICONS[state];
             statusCard.className = 'bg-white rounded-lg shadow-lg p-6 mb-6 text-center transition-all duration-300'; // Reset
             const stateClasses = {
-                SCANNING: 'bg-blue-100', SUCCESS: 'bg-green-100', ERROR: 'bg-red-100'
+                SCANNING: 'bg-red-100', SUCCESS: 'bg-green-100', ERROR: 'bg-red-100'
             };
             if(stateClasses[state]) statusCard.classList.add(stateClasses[state]);
         }
@@ -322,7 +404,7 @@
                 return;
             }
             if (!('NDEFReader' in window)) {
-                updateStatus('ERROR', '此瀏覽器不支援 Web NFC', '請使用支援的瀏覽器，例如 Android Chrome');
+                updateStatus('ERROR', '此瀏覽器不支援 Web NFC', '請使用支援的瀏覽器');
                 return;
             }
             try {
@@ -330,13 +412,13 @@
                 abortController = new AbortController();
                 isScanning = true;
                 scanButton.textContent = '取消掃描';
-                scanButton.classList.replace('bg-blue-500', 'bg-yellow-500');
+                scanButton.classList.replace('bg-red-500', 'bg-yellow-500');
                 updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤');
 
                 abortController.signal.onabort = () => {
                     isScanning = false;
                     scanButton.textContent = '開始巡邏掃描';
-                    scanButton.classList.replace('bg-yellow-500', 'bg-blue-500');
+                    scanButton.classList.replace('bg-yellow-500', 'bg-red-500');
                     updateStatus('IDLE', '掃描已取消', '點擊按鈕以重新開始');
                 };
                 
@@ -371,7 +453,7 @@
                     }
                 });
             } catch (error) {
-                if (error.name !== 'AbortError') updateStatus('ERROR', '無法啟動NFC掃描', '請確認NFC功能已開啟並授予權限');
+                if (error.name !== 'AbortError') updateStatus('ERROR', '無法啟動NFC掃描', '請確認NFC功能已開啟');
                 isScanning = false;
             }
         }
@@ -386,6 +468,11 @@
         const addCommunityButton = document.getElementById('add-community-button');
         const communityList = document.getElementById('community-list');
         const userList = document.getElementById('user-list');
+        const addUserForm = document.getElementById('add-user-form');
+        const addUserError = document.getElementById('add-user-error');
+        const addUserButton = document.getElementById('add-user-button');
+        const addUserLoader = document.getElementById('add-user-loader');
+        const userCommunitiesChecklist = document.getElementById('user-communities-checklist');
 
         addCommunityButton.addEventListener('click', async () => {
             const name = communityNameInput.value.trim();
@@ -394,14 +481,31 @@
                 communityNameInput.value = '';
             }
         });
+        
         function loadCommunities() {
-            onSnapshot(collection(db, "communities"), (snapshot) => {
+            const q = query(collection(db, "communities"), orderBy("name"));
+            onSnapshot(q, (snapshot) => {
                 communityList.innerHTML = '';
+                userCommunitiesChecklist.innerHTML = ''; // 清空新增帳號表單中的社區列表
+                if (snapshot.empty) {
+                     userCommunitiesChecklist.innerHTML = '<p class="text-gray-500">請先新增服務社區</p>';
+                }
                 snapshot.forEach(doc => {
+                    const community = { id: doc.id, ...doc.data() };
+                    // 渲染社區管理列表
                     const item = document.createElement('div');
                     item.className = 'list-item flex justify-between items-center p-2 bg-gray-100 rounded';
-                    item.textContent = doc.data().name;
+                    item.textContent = community.name;
                     communityList.appendChild(item);
+
+                    // 渲染新增帳號表單中的社區複選框
+                    const checkItem = document.createElement('div');
+                    checkItem.className = 'flex items-center';
+                    checkItem.innerHTML = `
+                        <input id="comm-${community.id}" type="checkbox" value="${community.id}" data-name="${community.name}" class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
+                        <label for="comm-${community.id}" class="ml-2 block text-sm text-gray-900">${community.name}</label>
+                    `;
+                    userCommunitiesChecklist.appendChild(checkItem);
                 });
             });
         }
@@ -418,15 +522,61 @@
             });
         }
         
+        addUserForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            addUserError.textContent = '';
+            addUserButton.disabled = true;
+            addUserLoader.classList.remove('hidden');
+
+            const selectedCommunities = [];
+            userCommunitiesChecklist.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => {
+                selectedCommunities.push(checkbox.value);
+            });
+
+            const userData = {
+                name: document.getElementById('user-name-input').value,
+                email: document.getElementById('user-email-input').value,
+                password: document.getElementById('user-password-input').value,
+                role: document.getElementById('user-role-select').value,
+                title: document.getElementById('user-title-input').value,
+                communities: selectedCommunities,
+            };
+
+            try {
+                const createUser = httpsCallable(functions, 'createUser');
+                const result = await createUser(userData);
+                if (result.data.success) {
+                    addUserForm.reset();
+                    // Optional: show a success message
+                } else {
+                    throw new Error(result.data.error || '未知錯誤');
+                }
+            } catch (error) {
+                addUserError.textContent = error.message || "建立帳號失敗";
+            } finally {
+                addUserButton.disabled = false;
+                addUserLoader.classList.add('hidden');
+            }
+        });
+
         // --- 資料頁邏輯 ---
         function loadDataLogs() {
             const dataLogContainer = document.getElementById('data-log-container');
             let q;
+            const userCommunities = currentUserProfile.communities || [];
             if (currentUserProfile.role === '管理員') {
                 q = query(collection(db, "logs"), orderBy("timestamp", "desc"));
+            } else if (userCommunities.length > 0) {
+                 q = query(collection(db, "logs"), where("communityIds", "array-contains-any", userCommunities), orderBy("timestamp", "desc"));
             } else {
-                 q = query(collection(db, "logs"), where("communityIds", "array-contains-any", currentUserProfile.communities || []), orderBy("timestamp", "desc"));
+                q = null; // 如果非管理員且沒有社區，則不查詢
             }
+
+            if (!q) {
+                dataLogContainer.innerHTML = '<p class="text-center text-gray-500 py-4">您尚未被指派任何社區</p>';
+                return;
+            }
+
             onSnapshot(q, (snapshot) => {
                 dataLogContainer.innerHTML = snapshot.empty ? '<p class="text-center text-gray-500 py-4">沒有任何歷史紀錄</p>' : '';
                 snapshot.forEach(doc => {
@@ -447,8 +597,16 @@
             clockDateEl.textContent = now.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
             clockTimeEl.textContent = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
         }
-        updateClock();
-        setInterval(updateClock, 1000);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const rememberedEmail = localStorage.getItem('rememberedEmail');
+            if (rememberedEmail) {
+                emailInput.value = rememberedEmail;
+                rememberMeCheckbox.checked = true;
+            }
+            updateClock();
+            setInterval(updateClock, 1000);
+        });
     </script>
 </body>
 </html>
