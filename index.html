@@ -2,340 +2,348 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>保全巡邏打卡系統</title>
-    <!-- 引入 Tailwind CSS 以進行快速美化 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>西北保全巡邏打卡系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 自定義樣式 */
-        body {
-            -webkit-tap-highlight-color: transparent; /* 移除行動裝置點擊高亮效果 */
-        }
-        .log-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            background-color: white;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-            margin-bottom: 0.75rem;
-            transition: transform 0.2s;
-        }
-        .log-item:hover {
-            transform: scale(1.02);
-        }
-        .status-card {
-            transition: all 0.3s ease-in-out;
-        }
+        /* 基本樣式 */
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        body { -webkit-tap-highlight-color: transparent; background-color: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .main-container { height: calc(100vh - 40px); width: calc(100vw - 20px); margin: 20px 10px; }
+        .page-content { height: calc(100% - 140px); }
+        .nav-btn-active { background-color: #3b82f6; color: white; }
+        .log-item, .list-item { transition: transform 0.2s; }
+        .log-item:hover, .list-item:hover { transform: scale(1.02); }
+        /* 隱藏滾動條 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="bg-gray-100 font-sans">
-    <div class="container mx-auto p-4 max-w-lg">
-        <!-- 頂部標題 -->
-        <header class="text-center mb-6 py-4">
-            <h1 class="text-3xl font-bold text-gray-800">保全巡邏打卡系統</h1>
-            <p class="text-gray-500">使用NFC標籤進行感應打卡</p>
-        </header>
+<body class="flex items-center justify-center">
 
-        <!-- 主操作區域 -->
-        <main>
-            <!-- 狀態顯示卡 -->
-            <div id="status-card" class="bg-white rounded-lg shadow-lg p-6 mb-6 text-center status-card">
-                <div id="icon-container" class="mx-auto bg-gray-200 rounded-full w-16 h-16 flex items-center justify-center mb-4">
-                    <!-- 圖示將由 JavaScript 動態插入 -->
-                    <svg id="status-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio-tower text-gray-500"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.24 6.24 0 0 1 0 8.8"/><path d="M10.6 7.6a2.49 2.49 0 0 1 0 3.5"/><path d="M19.1 1.9C23 5.8 23 12.2 19.1 16.1"/><path d="M16.2 4.7a6.24 6.24 0 0 0 0 8.8"/><path d="M13.4 7.6a2.49 2.49 0 0 0 0 3.5"/><path d="M12 22V12"/><path d="m9 12 3-10 3 10"/></svg>
-                </div>
-                <p id="status-text" class="text-lg font-semibold text-gray-700">請先點擊下方按鈕開始掃描</p>
-                <p id="hint-text" class="text-sm text-gray-500 mt-1">準備就緒後，將手機靠近NFC標籤</p>
-            </div>
-
-            <!-- 操作按鈕 -->
-            <div class="text-center mb-8">
-                <button id="scan-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300">
-                    開始巡邏掃描
-                </button>
-            </div>
-
-            <!-- 打卡紀錄 -->
-            <div>
-                <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b-2 pb-2">打卡紀錄</h2>
-                <div id="log-container" class="space-y-3">
-                    <p id="no-log-message" class="text-center text-gray-500 py-4">目前沒有任何打卡紀錄</p>
-                    <!-- 紀錄將由 JavaScript 動態插入 -->
-                </div>
-            </div>
-             <div class="text-center mt-6">
-                 <button id="clear-button" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-md shadow-md transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-300">
-                    清除所有紀錄
-                </button>
-             </div>
-        </main>
+    <!-- 登入頁面 -->
+    <div id="login-page" class="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
+        <h2 class="text-3xl font-bold text-center text-gray-900">西北保全巡邏打卡系統</h2>
+        <div>
+            <label for="email" class="text-sm font-medium text-gray-700">帳號 (電子郵件)</label>
+            <input id="email" name="email" type="email" autocomplete="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <div>
+            <label for="password" class="text-sm font-medium text-gray-700">密碼</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <p id="login-error" class="text-red-500 text-sm text-center"></p>
+        <button id="login-button" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            登入
+        </button>
     </div>
 
-    <script>
-        const scanButton = document.getElementById('scan-button');
-        const clearButton = document.getElementById('clear-button');
-        const statusText = document.getElementById('status-text');
-        const hintText = document.getElementById('hint-text');
-        const logContainer = document.getElementById('log-container');
-        const noLogMessage = document.getElementById('no-log-message');
-        const statusCard = document.getElementById('status-card');
-        const iconContainer = document.getElementById('icon-container');
+    <!-- 主應用程式容器 -->
+    <div id="app-container" class="main-container bg-white rounded-xl shadow-2xl flex-col max-w-lg mx-auto overflow-hidden hidden">
         
-        let logEntries = [];
-        let lastScannedSerial = null;
-        let lastScanTime = 0;
-        let uiTimeoutId = null;
-        const COOLDOWN_PERIOD_MS = 3000; // 為同一個標籤設定3秒的冷卻時間
+        <!-- 頁首 -->
+        <header id="app-header" class="flex-shrink-0 flex items-center justify-between p-4" style="height: 70px;">
+            <h1 class="text-2xl font-bold text-gray-800"></h1>
+            <button id="logout-button" class="text-gray-500 hover:text-red-500 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+            </button>
+        </header>
 
-        let isScanning = false;
-        let abortController;
+        <!-- 頁中 (主要內容區域) -->
+        <main class="flex-grow overflow-y-auto p-4 bg-gray-50 no-scrollbar" style="height: calc(100% - 140px);">
+            <!-- 首頁內容 -->
+            <div id="page-home" class="hidden h-full">
+                <div class="flex flex-col items-center justify-center h-full text-center">
+                    <div id="clock-date" class="text-xl text-gray-600"></div>
+                    <div id="clock-time" class="text-7xl font-bold text-gray-800 tracking-wider"></div>
+                    <div class="mt-4 text-gray-700">歡迎, <span id="user-name-display" class="font-semibold"></span>!</div>
+                </div>
+            </div>
 
-        // 圖示 SVG
-        const ICONS = {
-            SCANNING: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scan-line text-blue-500 animate-pulse"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>`,
-            SUCCESS: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle-2 text-green-500"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>`,
-            ERROR: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle text-red-500"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>`,
-            IDLE: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio-tower text-gray-500"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.24 6.24 0 0 1 0 8.8"/><path d="M10.6 7.6a2.49 2.49 0 0 1 0 3.5"/><path d="M19.1 1.9C23 5.8 23 12.2 19.1 16.1"/><path d="M16.2 4.7a6.24 6.24 0 0 0 0 8.8"/><path d="M13.4 7.6a2.49 2.49 0 0 0 0 3.5"/><path d="M12 22V12"/><path d="m9 12 3-10 3 10"/></svg>`
+            <!-- 巡邏頁內容 -->
+            <div id="page-patrol" class="hidden">
+                 <!-- 狀態顯示卡... -->
+            </div>
+
+            <!-- 資料頁內容 -->
+            <div id="page-data" class="hidden">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b-2 pb-2">歷史巡邏紀錄</h2>
+                <div id="data-log-container" class="space-y-3">
+                    <p class="text-center text-gray-500 py-4">正在載入紀錄...</p>
+                </div>
+            </div>
+
+            <!-- 設定頁內容 -->
+            <div id="page-settings" class="hidden">
+                <!-- 社區管理 -->
+                <div class="mb-8">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">社區管理</h2>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <div class="flex gap-2 mb-4">
+                            <input id="community-name-input" type="text" placeholder="輸入新的社區名稱" class="flex-grow border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            <button id="add-community-button" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">新增</button>
+                        </div>
+                        <div id="community-list" class="space-y-2"></div>
+                    </div>
+                </div>
+                
+                <!-- 帳號管理 -->
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">帳號管理</h2>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                         <p class="text-sm text-gray-600 mb-4">
+                            <strong>重要提示:</strong> 帳號的新增與密碼設定，請至 Firebase 後台操作。此處僅顯示已在 Firestore 建立對應資料的帳號。
+                        </p>
+                        <div id="user-list" class="space-y-2"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 頁尾 -->
+        <footer class="flex-shrink-0 grid grid-cols-4 gap-2 p-2" style="height: 70px;">
+            <button data-page="home" class="nav-btn flex flex-col items-center justify-center rounded-lg transition-colors">
+                <span>首頁</span>
+            </button>
+            <button data-page="patrol" class="nav-btn flex flex-col items-center justify-center rounded-lg transition-colors">
+                <span>巡邏</span>
+            </button>
+            <button data-page="data" class="nav-btn flex flex-col items-center justify-center rounded-lg transition-colors">
+                <span>資料</span>
+            </button>
+            <button data-page="settings" class="nav-btn flex flex-col items-center justify-center rounded-lg transition-colors">
+                <span>設定</span>
+            </button>
+        </footer>
+    </div>
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        // 匯入 Firebase 模組
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, onSnapshot, addDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // --- Firebase 設定 ---
+        // 重要：請將下方的 firebaseConfig 換成您自己的 Firebase 專案設定
+        const firebaseConfig = {
+  apiKey: "AIzaSyBaBL7rKPnqpz8hbfILWq6cDWdZust13xM",
+  authDomain: "nw-patrol.firebaseapp.com",
+  projectId: "nw-patrol",
+  storageBucket: "nw-patrol.firebasestorage.app",
+  messagingSenderId: "157808049159",
+  appId: "1:157808049159:web:6f9128d16cb9919d50bea2",
+  measurementId: "G-44B5L4KH1Q"
+};
+
+        // 初始化 Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        let currentUserProfile = null; // 用於儲存登入者的資料
+
+        // --- 全域元素選擇器 ---
+        const loginPage = document.getElementById('login-page');
+        const appContainer = document.getElementById('app-container');
+        const loginButton = document.getElementById('login-button');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginError = document.getElementById('login-error');
+        const logoutButton = document.getElementById('logout-button');
+        const userNameDisplay = document.getElementById('user-name-display');
+        
+        // --- 導覽相關 ---
+        const pageElements = {
+            home: document.getElementById('page-home'),
+            patrol: document.getElementById('page-patrol'),
+            data: document.getElementById('page-data'),
+            settings: document.getElementById('page-settings'),
         };
-
-        // 更新狀態顯示
-        function updateStatus(state, message, hint = '') {
-            statusText.textContent = message;
-            hintText.textContent = hint;
-            iconContainer.innerHTML = ICONS[state];
-            
-            statusCard.classList.remove('bg-blue-100', 'bg-green-100', 'bg-red-100', 'bg-white');
-            iconContainer.classList.remove('bg-blue-200', 'bg-green-200', 'bg-red-200', 'bg-gray-200');
-
-            switch(state) {
-                case 'SCANNING':
-                    statusCard.classList.add('bg-blue-100');
-                    iconContainer.classList.add('bg-blue-200');
-                    break;
-                case 'SUCCESS':
-                    statusCard.classList.add('bg-green-100');
-                    iconContainer.classList.add('bg-green-200');
-                    break;
-                case 'ERROR':
-                    statusCard.classList.add('bg-red-100');
-                    iconContainer.classList.add('bg-red-200');
-                    break;
-                default:
-                    statusCard.classList.add('bg-white');
-                    iconContainer.classList.add('bg-gray-200');
-            }
-        }
+        const navButtons = document.querySelectorAll('.nav-btn');
+        const headerTitle = document.querySelector('#app-header h1');
         
-        // 渲染打卡紀錄列表
-        function renderLog() {
-            logContainer.innerHTML = ''; // 清空現有紀錄
-            if (logEntries.length === 0) {
-                logContainer.appendChild(noLogMessage);
-            } else {
-                 // 從最新的紀錄開始顯示
-                [...logEntries].reverse().forEach(entry => {
-                    const logElement = document.createElement('div');
-                    logElement.className = 'log-item';
+        // --- 監聽認證狀態 ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // 使用者已登入
+                const userDocRef = doc(db, "users", user.uid);
+                const userDocSnap = await getDoc(userDocRef);
 
-                    const infoDiv = document.createElement('div');
-                    const idElement = document.createElement('p');
-                    idElement.className = 'font-semibold text-gray-800';
-                    idElement.textContent = `巡邏點: ${entry.location}`;
-                    
-                    const timeElement = document.createElement('p');
-                    timeElement.className = 'text-sm text-gray-500';
-                    timeElement.textContent = entry.timestamp;
-
-                    infoDiv.appendChild(idElement);
-                    infoDiv.appendChild(timeElement);
-                    
-                    const statusIcon = document.createElement('div');
-                    statusIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin text-blue-500"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
-                    
-                    logElement.appendChild(infoDiv);
-                    logElement.appendChild(statusIcon);
-                    logContainer.appendChild(logElement);
-                });
-            }
-        }
-
-        // 切換掃描狀態 (開始/停止)
-        async function toggleScan() {
-            if (isScanning) {
-                // --- 停止掃描的邏輯 ---
-                if (abortController) {
-                    abortController.abort();
+                if (userDocSnap.exists()) {
+                    currentUserProfile = { uid: user.uid, ...userDocSnap.data() };
+                    userNameDisplay.textContent = currentUserProfile.name || '使用者';
+                    setupUIForUser(currentUserProfile);
+                    loginPage.classList.add('hidden');
+                    appContainer.classList.remove('hidden');
+                    appContainer.classList.add('flex');
+                    showPage('home'); // 登入後預設顯示首頁
+                } else {
+                    // Firestore 中沒有此使用者的資料
+                    loginError.textContent = '找不到使用者設定檔，請聯繫管理員。';
+                    await signOut(auth);
                 }
             } else {
-                // --- 開始掃描的邏輯 ---
-                if (!('NDEFReader' in window)) {
-                    updateStatus('ERROR', '此瀏覽器不支援 Web NFC', '請使用支援的瀏覽器，例如 Android Chrome');
+                // 使用者已登出
+                currentUserProfile = null;
+                loginPage.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+                appContainer.classList.remove('flex');
+            }
+        });
+        
+        // --- 登入邏輯 ---
+        loginButton.addEventListener('click', async () => {
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            loginError.textContent = '';
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                // onAuthStateChanged 會處理後續 UI 變化
+            } catch (error) {
+                loginError.textContent = '帳號或密碼錯誤。';
+                console.error("Login failed:", error);
+            }
+        });
+
+        // --- 登出邏輯 ---
+        logoutButton.addEventListener('click', async () => {
+            await signOut(auth);
+        });
+
+        // --- 根據使用者角色設定UI ---
+        function setupUIForUser(profile) {
+            const roles = {
+                '管理員': ['home', 'patrol', 'data', 'settings'],
+                '高階主管': ['home', 'patrol', 'data'],
+                '總幹事': ['home', 'patrol', 'data'],
+                '保全': ['home', 'patrol', 'data']
+            };
+            const allowedPages = roles[profile.role] || [];
+            
+            navButtons.forEach(btn => {
+                const page = btn.dataset.page;
+                if (allowedPages.includes(page)) {
+                    btn.classList.remove('hidden');
+                } else {
+                    btn.classList.add('hidden');
+                }
+            });
+            // 重新計算 grid-cols
+            const visibleButtons = allowedPages.length;
+            const footer = document.querySelector('footer');
+            footer.className = `flex-shrink-0 grid grid-cols-${visibleButtons} gap-2 p-2`;
+        }
+
+        // --- 導覽邏輯 ---
+        function showPage(pageName) {
+            Object.values(pageElements).forEach(page => page.classList.add('hidden'));
+            if (pageElements[pageName]) {
+                pageElements[pageName].classList.remove('hidden');
+            }
+
+            const titles = { home: '首頁', patrol: '巡邏打卡', data: '歷史紀錄', settings: '系統設定' };
+            headerTitle.textContent = titles[pageName] || '保全系統';
+
+            navButtons.forEach(btn => {
+                btn.classList.toggle('nav-btn-active', btn.dataset.page === pageName);
+            });
+            
+            // 根據頁面載入特定資料
+            if(pageName === 'settings' && currentUserProfile.role === '管理員') {
+                loadCommunities();
+                loadUsers();
+            }
+            if(pageName === 'data'){
+                loadDataLogs();
+            }
+        }
+        navButtons.forEach(btn => btn.addEventListener('click', () => showPage(btn.dataset.page)));
+        
+        // --- 設定頁邏輯 (僅管理員) ---
+        const communityNameInput = document.getElementById('community-name-input');
+        const addCommunityButton = document.getElementById('add-community-button');
+        const communityList = document.getElementById('community-list');
+        const userList = document.getElementById('user-list');
+
+        addCommunityButton.addEventListener('click', async () => {
+            const name = communityNameInput.value.trim();
+            if (name) {
+                await addDoc(collection(db, "communities"), { name: name });
+                communityNameInput.value = '';
+            }
+        });
+
+        function loadCommunities() {
+            onSnapshot(collection(db, "communities"), (snapshot) => {
+                communityList.innerHTML = '';
+                snapshot.forEach(doc => {
+                    const item = document.createElement('div');
+                    item.className = 'list-item flex justify-between items-center p-2 bg-gray-100 rounded';
+                    item.textContent = doc.data().name;
+                    communityList.appendChild(item);
+                });
+            });
+        }
+        
+        function loadUsers() {
+            onSnapshot(collection(db, "users"), (snapshot) => {
+                userList.innerHTML = '';
+                snapshot.forEach(doc => {
+                    const user = doc.data();
+                    const item = document.createElement('div');
+                    item.className = 'list-item p-2 bg-gray-100 rounded';
+                    item.innerHTML = `
+                        <p class="font-semibold">${user.name} (${user.role})</p>
+                        <p class="text-sm text-gray-600">${user.email}</p>
+                    `;
+                    userList.appendChild(item);
+                });
+            });
+        }
+        
+        // --- 資料頁邏輯 ---
+        function loadDataLogs() {
+            const dataLogContainer = document.getElementById('data-log-container');
+            let q;
+            if (currentUserProfile.role === '管理員') {
+                q = query(collection(db, "logs"), orderBy("timestamp", "desc"));
+            } else {
+                 q = query(collection(db, "logs"), where("communityIds", "array-contains-any", currentUserProfile.communities), orderBy("timestamp", "desc"));
+            }
+            
+            onSnapshot(q, (snapshot) => {
+                dataLogContainer.innerHTML = '';
+                if(snapshot.empty){
+                    dataLogContainer.innerHTML = '<p class="text-center text-gray-500 py-4">沒有任何歷史紀錄</p>';
                     return;
                 }
-
-                try {
-                    const reader = new NDEFReader();
-                    abortController = new AbortController();
-                    
-                    isScanning = true;
-                    scanButton.textContent = '取消掃描';
-                    scanButton.classList.replace('bg-blue-500', 'bg-yellow-500');
-                    scanButton.classList.replace('hover:bg-blue-600', 'hover:bg-yellow-600');
-                    updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤');
-
-                    abortController.signal.onabort = () => {
-                        isScanning = false;
-                        scanButton.textContent = '開始巡邏掃描';
-                        scanButton.classList.replace('bg-yellow-500', 'bg-blue-500');
-                        scanButton.classList.replace('hover:bg-yellow-600', 'hover:bg-blue-600');
-                        updateStatus('IDLE', '掃描已取消', '點擊按鈕以重新開始');
-                        clearTimeout(uiTimeoutId); // 清除可能存在的UI計時器
-                    };
-                    
-                    await reader.scan({ signal: abortController.signal });
-
-                    reader.addEventListener('reading', ({ message, serialNumber }) => {
-                        const currentTime = Date.now();
-                        if (serialNumber === lastScannedSerial && (currentTime - lastScanTime < COOLDOWN_PERIOD_MS)) {
-                            return; // 忽略同一個標籤在冷卻時間內的重複讀取
-                        }
-                        
-                        lastScannedSerial = serialNumber;
-                        lastScanTime = currentTime;
-
-                        const decoder = new TextDecoder();
-                        let location = "未知地點";
-                        if (message.records.length > 0) {
-                            location = decoder.decode(message.records[0].data);
-                        }
-                        
-                        const now = new Date();
-                        const newEntry = {
-                            location: location,
-                            timestamp: now.toLocaleString('zh-TW'),
-                            serialNumber: serialNumber,
-                        };
-                        
-                        logEntries.push(newEntry);
-                        saveToLocalStorage();
-                        renderLog();
-                        
-                        clearTimeout(uiTimeoutId);
-                        updateStatus('SUCCESS', `打卡成功: ${location}`, '可以繼續掃描下一個巡邏點');
-                        if ('vibrate' in navigator) navigator.vibrate(200);
-
-                        uiTimeoutId = setTimeout(() => {
-                             if(isScanning) { // 只有在仍在掃描狀態時才恢復UI
-                                updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤');
-                             }
-                        }, COOLDOWN_PERIOD_MS);
-                    });
-
-                } catch (error) {
-                    if (error.name !== 'AbortError') {
-                        console.error('啟動NFC掃描失敗: ', error);
-                        updateStatus('ERROR', '無法啟動NFC掃描', '請確認手機NFC功能已開啟並授予權限');
-                    }
-                     // 不論錯誤為何，都重置狀態
-                    isScanning = false;
-                    scanButton.textContent = '開始巡邏掃描';
-                    scanButton.classList.replace('bg-yellow-500', 'bg-blue-500');
-                    scanButton.classList.replace('hover:bg-yellow-600', 'hover:bg-blue-600');
-                }
-            }
+                snapshot.forEach(doc => {
+                    const log = doc.data();
+                    const item = document.createElement('div');
+                    item.className = 'log-item bg-white p-3 rounded-lg shadow-sm';
+                    item.innerHTML = `
+                        <div>
+                           <p class="font-semibold">${log.location}</p>
+                           <p class="text-sm text-gray-500">${new Date(log.timestamp.seconds * 1000).toLocaleString()}</p>
+                           <p class="text-xs text-gray-400">by ${log.userName}</p>
+                        </div>
+                    `;
+                    dataLogContainer.appendChild(item);
+                });
+            });
         }
 
-        // 將紀錄保存到 Local Storage
-        function saveToLocalStorage() {
-            localStorage.setItem('patrolLog', JSON.stringify(logEntries));
+        // --- 初始化 ---
+        const clockDateEl = document.getElementById('clock-date');
+        const clockTimeEl = document.getElementById('clock-time');
+        function updateClock() {
+            const now = new Date();
+            clockDateEl.textContent = now.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+            clockTimeEl.textContent = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
         }
-
-        // 從 Local Storage 載入紀錄
-        function loadFromLocalStorage() {
-            const savedLog = localStorage.getItem('patrolLog');
-            if (savedLog) {
-                logEntries = JSON.parse(savedLog);
-                renderLog();
-            }
-        }
-
-        // 清除所有紀錄
-        clearButton.addEventListener('click', () => {
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center';
-            modal.innerHTML = `
-                <div class="bg-white rounded-lg shadow-xl p-6 w-11/12 max-w-sm text-center">
-                    <p class="text-lg font-semibold mb-4">您確定要清除所有打卡紀錄嗎？</p>
-                    <p class="text-sm text-gray-600 mb-6">此操作無法復原。</p>
-                    <div class="flex justify-center space-x-4">
-                        <button id="confirm-clear" class="bg-red-500 text-white px-6 py-2 rounded-md">確定</button>
-                        <button id="cancel-clear" class="bg-gray-300 text-gray-800 px-6 py-2 rounded-md">取消</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-
-            document.getElementById('confirm-clear').onclick = () => {
-                logEntries = [];
-                saveToLocalStorage();
-                renderLog();
-                updateStatus('IDLE', '紀錄已清除', '可以開始新的巡邏任務');
-                document.body.removeChild(modal);
-            };
-
-            document.getElementById('cancel-clear').onclick = () => {
-                document.body.removeChild(modal);
-            };
-        });
-        
-        // 將原本的 confirm 對話框替換為自定義的 modal
-        clearButton.addEventListener('click', (e) => {
-            e.preventDefault(); // 阻止預設行為
-            if (document.querySelector('.fixed.inset-0')) return; // 如果 modal 已存在則不重複開啟
-
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            modal.innerHTML = `
-                <div class="bg-white rounded-lg shadow-xl p-6 w-11/12 max-w-sm text-center transform transition-all scale-95 opacity-0 animate-fade-in-up">
-                    <p class="text-lg font-semibold mb-4">您確定要清除所有打卡紀錄嗎？</p>
-                    <p class="text-sm text-gray-600 mb-6">此操作無法復原。</p>
-                    <div class="flex justify-center space-x-4">
-                        <button id="confirm-clear-btn" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-md transition-colors">確定</button>
-                        <button id="cancel-clear-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-2 rounded-md transition-colors">取消</button>
-                    </div>
-                </div>
-                <style>
-                    @keyframes fade-in-up {
-                        from { opacity: 0; transform: scale(.95) translateY(10px); }
-                        to { opacity: 1; transform: scale(1) translateY(0); }
-                    }
-                    .animate-fade-in-up { animation: fade-in-up 0.2s ease-out forwards; }
-                </style>
-            `;
-            document.body.appendChild(modal);
-
-            const removeModal = () => {
-                modal.remove();
-            };
-
-            document.getElementById('confirm-clear-btn').onclick = () => {
-                logEntries = [];
-                saveToLocalStorage();
-                renderLog();
-                if(!isScanning) {
-                    updateStatus('IDLE', '紀錄已清除', '可以開始新的巡邏任務');
-                }
-                removeModal();
-            };
-            document.getElementById('cancel-clear-btn').onclick = removeModal;
-        });
-
-        scanButton.addEventListener('click', toggleScan);
-        
-        window.addEventListener('load', loadFromLocalStorage);
-
+        updateClock();
+        setInterval(updateClock, 1000);
     </script>
 </body>
 </html>
