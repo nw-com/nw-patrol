@@ -135,7 +135,7 @@
                         <button data-tab="map" class="patrol-tab-btn flex-1 p-2 text-center font-medium border-b-2 border-red-500 text-red-600">巡邏地圖</button>
                         <button data-tab="log" class="patrol-tab-btn flex-1 p-2 text-center font-medium border-b-2 border-transparent text-gray-500">本次巡邏紀錄</button>
                     </div>
-                    <div id="patrol-map-tab" class="flex-grow h-full w-full">
+                    <div id="patrol-map-tab" class="flex-grow">
                         <div id="patrol-map" class="h-full w-full rounded-md"></div>
                     </div>
                     <div id="patrol-log-tab" class="hidden h-full overflow-y-auto">
@@ -746,7 +746,8 @@
             document.getElementById('user-role-select').value = user.role;
             
             userCommunitiesChecklist.querySelectorAll('input').forEach(cb => {
-                cb.checked = user.communities.includes(cb.value);
+                const userCommunities = Array.isArray(user.communities) ? user.communities : [];
+                cb.checked = userCommunities.includes(cb.value);
             });
 
             addUserModal.classList.remove('hidden');
@@ -802,7 +803,12 @@
                 allUsers = [];
                 userList.innerHTML = '';
                 snapshot.forEach(doc => {
-                    const user = { id: doc.id, ...doc.data() };
+                    const userData = doc.data();
+                    const user = {
+                        id: doc.id,
+                        ...userData,
+                        communities: Array.isArray(userData.communities) ? userData.communities : []
+                    };
                     allUsers.push(user);
                     const item = document.createElement('div');
                     item.className = 'list-item flex justify-between items-center p-2 bg-gray-100 rounded';
