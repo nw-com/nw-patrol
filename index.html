@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>保全巡邏打卡系統</title>
+    <title>西北保全巡邏打卡系統</title>
     <!-- 引入 Tailwind CSS 以進行快速美化 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -85,6 +85,10 @@
         const statusIcon = document.getElementById('status-icon');
 
         let logEntries = [];
+        let lastScannedSerial = null;
+        let lastScanTime = 0;
+        let uiTimeoutId = null;
+        const COOLDOWN_PERIOD_MS = 3000; // 為同一個標籤設定3秒的冷卻時間
 
         // 圖示 SVG
         const ICONS = {
@@ -170,6 +174,16 @@
                 updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤');
 
                 reader.addEventListener('reading', ({ message, serialNumber }) => {
+                    const currentTime = Date.now();
+                    // 如果在冷卻時間內掃描同一個標籤，則忽略
+                    if (serialNumber === lastScannedSerial && (currentTime - lastScanTime < COOLDOWN_PERIOD_MS)) {
+                        return;
+                    }
+                    
+                    // 更新最後掃描紀錄
+                    lastScannedSerial = serialNumber;
+                    lastScanTime = currentTime;
+
                     // 假設NFC標籤裡儲存的是NDEF格式的文字紀錄
                     const decoder = new TextDecoder();
                     let location = "未知地點";
@@ -188,6 +202,9 @@
                     saveToLocalStorage();
                     renderLog();
                     
+                    // 清除上一個UI更新計時器，避免狀態錯亂
+                    clearTimeout(uiTimeoutId);
+                    
                     updateStatus('SUCCESS', `打卡成功: ${location}`, '可以繼續掃描下一個巡邏點');
                     
                     // 震動提示
@@ -195,10 +212,10 @@
                         navigator.vibrate(200);
                     }
 
-                    // 2秒後恢復掃描狀態
-                    setTimeout(() => {
+                    // 冷卻時間後，將UI恢復為掃描中狀態
+                    uiTimeoutId = setTimeout(() => {
                          updateStatus('SCANNING', '掃描中...', '請將手機靠近NFC標籤');
-                    }, 2000);
+                    }, COOLDOWN_PERIOD_MS);
                 });
 
                 reader.addEventListener('error', (event) => {
