@@ -26,7 +26,37 @@
         /* Map Styles */
         .map-container { height: 200px; width: 100%; border-radius: 0.5rem; border: 1px solid #ddd; }
         #patrol-map { height: 100%; width: 100%; }
-        .leaflet-marker-icon.completed-marker { filter: hue-rotate(90deg) saturate(1.5); } /* Red -> Green */
+        .leaflet-marker-icon.completed-marker { filter: hue-rotate(100deg) saturate(1.5); } /* Red -> Greenish */
+        .input {
+             display: block;
+             width: 100%;
+             padding: 0.5rem 0.75rem;
+             border: 1px solid #D1D5DB;
+             border-radius: 0.375rem;
+             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        .input:focus {
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            border-color: #EF4444;
+            box-shadow: 0 0 0 2px #FDBA74;
+        }
+        .button-primary {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            border: 1px solid transparent;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: white;
+            background-color: #EF4444;
+        }
+        .button-primary:hover {
+            background-color: #DC2626;
+        }
+
     </style>
 </head>
 <body class="flex items-center justify-center">
@@ -100,6 +130,7 @@
                 <div id="patrol-schedule-selection" class="w-full space-y-3 hidden"></div>
 
                 <div id="patrol-main-view" class="w-full h-full flex-col hidden">
+                    <button id="back-to-schedule-btn" class="text-sm text-red-600 hover:text-red-800 font-medium mb-2">&lt; 返回班次選擇</button>
                     <div class="flex border-b mb-2">
                         <button data-tab="map" class="patrol-tab-btn flex-1 p-2 text-center font-medium border-b-2 border-red-500 text-red-600">巡邏地圖</button>
                         <button data-tab="log" class="patrol-tab-btn flex-1 p-2 text-center font-medium border-b-2 border-transparent text-gray-500">本次巡邏紀錄</button>
@@ -200,21 +231,320 @@
                         <button type="button" id="add-schedule-button" class="mt-3 text-sm text-red-600 hover:text-red-800 font-medium">+ 新增排班</button>
                     </div>
                     <p id="add-community-error" class="text-red-500 text-sm text-center h-5"></p>
-                    <button type="submit" class="w-full flex justify-center items-center py-2 px-4 button-primary">儲存社區</button>
+                    <button type="submit" class="w-full button-primary">儲存社區</button>
                 </form>
             </div>
         </div>
     </div>
     <div id="add-user-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
-        <!-- User Modal Content -->
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-full overflow-y-auto no-scrollbar">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4 border-b pb-3">
+                    <h3 class="text-xl font-semibold text-gray-800">新增帳號</h3>
+                    <button id="close-add-user-modal-button" class="text-gray-400 hover:text-gray-800 text-3xl font-light">&times;</button>
+                </div>
+                <form id="add-user-form" class="space-y-4">
+                    <div>
+                        <label for="user-name-input" class="text-sm font-medium text-gray-700">姓名</label>
+                        <input id="user-name-input" type="text" required class="mt-1 block w-full input">
+                    </div>
+                     <div>
+                        <label for="user-email-input" class="text-sm font-medium text-gray-700">帳號 (電子郵件)</label>
+                        <input id="user-email-input" type="email" required class="mt-1 block w-full input">
+                    </div>
+                    <div>
+                        <label for="user-password-input" class="text-sm font-medium text-gray-700">密碼</label>
+                        <input id="user-password-input" type="password" required class="mt-1 block w-full input">
+                    </div>
+                     <div>
+                        <label for="user-title-input" class="text-sm font-medium text-gray-700">職稱</label>
+                        <input id="user-title-input" type="text" required class="mt-1 block w-full input">
+                    </div>
+                    <div>
+                        <label for="user-role-select" class="text-sm font-medium text-gray-700">角色</label>
+                        <select id="user-role-select" required class="mt-1 block w-full input bg-white">
+                            <option>保全</option>
+                            <option>總幹事</option>
+                            <option>高階主管</option>
+                            <option>管理員</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">服務社區</label>
+                        <div id="user-communities-checklist" class="mt-2 space-y-2 max-h-32 overflow-y-auto border p-2 rounded-md">
+                            <p class="text-gray-500">正在載入社區列表...</p>
+                        </div>
+                    </div>
+                    <p id="add-user-error" class="text-red-500 text-sm text-center h-5"></p>
+                    <button type="submit" id="add-user-button" class="w-full button-primary">
+                        <span>建立帳號</span>
+                        <div id="add-user-loader" class="loader ml-3 hidden"></div>
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
     <div id="nfc-scan-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
-        <!-- NFC Scan Modal Content -->
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+             <div id="nfc-status-card" class="p-6 text-center transition-all duration-300">
+                <div id="nfc-icon-container" class="mx-auto bg-gray-200 rounded-full w-16 h-16 flex items-center justify-center mb-4">
+                </div>
+                <p id="nfc-status-text" class="text-lg font-semibold text-gray-700">點擊按鈕開始掃描</p>
+                <p id="nfc-hint-text" class="text-sm text-gray-500 mt-1">準備就緒後，將手機靠近NFC標籤</p>
+            </div>
+            <div class="p-4 bg-gray-50 border-t">
+                <button id="close-nfc-modal-button" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-md">關閉</button>
+            </div>
+        </div>
     </div>
     
     <!-- Firebase SDKs -->
     <script type="module">
-        // Firebase and other logic will go here
+        // 匯入 Firebase 模組
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, onSnapshot, addDoc, query, where, orderBy, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+
+        // --- Firebase 設定 ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyBaBL7rKPnqpz8hbfILWq6cDWdZust13xM",
+          authDomain: "nw-patrol.firebaseapp.com",
+          projectId: "nw-patrol",
+          storageBucket: "nw-patrol.appspot.com",
+          messagingSenderId: "157808049159",
+          appId: "1:157808049159:web:6f9128d16cb9919d50bea2",
+          measurementId: "G-44B5L4KH1Q"
+        };
+
+        // 初始化 Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const functions = getFunctions(app);
+        
+        let currentUserProfile = null;
+        let allUsers = []; // Cache for user data for schedules
+        let patrolMap, communitySetupMap;
+        let communityMarker, patrolPointMarkers = [];
+
+        // --- DOM 元素選擇器 ---
+        const loginPage = document.getElementById('login-page');
+        const appContainer = document.getElementById('app-container');
+        const loginButton = document.getElementById('login-button');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginError = document.getElementById('login-error');
+        const logoutButton = document.getElementById('logout-button');
+        const userNameDisplay = document.getElementById('user-name-display');
+        const rememberMeCheckbox = document.getElementById('remember-me');
+        const togglePasswordButton = document.getElementById('toggle-password');
+        const eyeIcon = document.getElementById('eye-icon');
+        const eyeOffIcon = document.getElementById('eye-off-icon');
+        const headerTitle = document.getElementById('header-title');
+        
+        const pageElements = {
+            home: document.getElementById('page-home'),
+            patrol: document.getElementById('page-patrol'),
+            data: document.getElementById('page-data'),
+            settings: document.getElementById('page-settings'),
+        };
+        const navButtons = document.querySelectorAll('.nav-btn');
+        
+        // --- 巡邏頁面元素 ---
+        const patrolCommunitySelection = document.getElementById('patrol-community-selection');
+        const patrolScheduleSelection = document.getElementById('patrol-schedule-selection');
+        const patrolMainView = document.getElementById('patrol-main-view');
+        const backToScheduleBtn = document.getElementById('back-to-schedule-btn');
+        const patrolTabButtons = document.querySelectorAll('.patrol-tab-btn');
+        const patrolMapTab = document.getElementById('patrol-map-tab');
+        const patrolLogTab = document.getElementById('patrol-log-tab');
+        const logContainer = document.getElementById('log-container');
+
+        // --- Modals ---
+        const addUserModal = document.getElementById('add-user-modal');
+        const addCommunityModal = document.getElementById('add-community-modal');
+        const nfcScanModal = document.getElementById('nfc-scan-modal');
+        
+        // --- 認證邏輯 ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                const userDocRef = doc(db, "users", user.uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists()) {
+                    currentUserProfile = { id: user.uid, ...userDocSnap.data() };
+                    userNameDisplay.textContent = currentUserProfile.name || '使用者';
+                    setupUIForUser(currentUserProfile);
+                    loginPage.classList.add('hidden');
+                    appContainer.classList.remove('hidden');
+                    appContainer.classList.add('flex');
+                    showPage('home');
+                } else {
+                    loginError.textContent = '找不到使用者設定檔。';
+                    await signOut(auth);
+                }
+            } else {
+                currentUserProfile = null;
+                loginPage.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+                appContainer.classList.remove('flex');
+            }
+        });
+        
+        loginButton.addEventListener('click', async () => {
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            loginError.textContent = '';
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                if (rememberMeCheckbox.checked) {
+                    localStorage.setItem('rememberedEmail', email);
+                } else {
+                    localStorage.removeItem('rememberedEmail');
+                }
+            } catch (error) {
+                loginError.textContent = '帳號或密碼錯誤。';
+            }
+        });
+
+        logoutButton.addEventListener('click', () => signOut(auth));
+
+        togglePasswordButton.addEventListener('click', () => {
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            eyeIcon.classList.toggle('hidden');
+            eyeOffIcon.classList.toggle('hidden');
+        });
+
+        // --- UI & 導覽 ---
+        function setupUIForUser(profile) {
+            const roles = { '管理員': ['home', 'patrol', 'data', 'settings'], '高階主管': ['home', 'patrol', 'data'], '總幹事': ['home', 'patrol', 'data'], '保全': ['home', 'patrol', 'data'] };
+            const allowedPages = roles[profile.role] || [];
+            navButtons.forEach(btn => btn.classList.toggle('hidden', !allowedPages.includes(btn.dataset.page)));
+            const footer = document.querySelector('footer');
+            footer.className = `flex-shrink-0 grid grid-cols-${allowedPages.length} gap-2 p-2`;
+        }
+
+        function showPage(pageName) {
+            Object.values(pageElements).forEach(page => page.classList.add('hidden'));
+            if (pageElements[pageName]) pageElements[pageName].classList.remove('hidden');
+
+            navButtons.forEach(btn => btn.classList.toggle('nav-btn-active', btn.dataset.page === pageName));
+            
+            const titles = { home: '首頁', patrol: '巡邏打卡', data: '歷史紀錄', settings: '系統設定' };
+            headerTitle.textContent = titles[pageName] || '西北保全巡邏打卡系統';
+
+            // Reset patrol page view when navigating to it
+            if (pageName === 'patrol') {
+                patrolCommunitySelection.classList.remove('hidden');
+                patrolScheduleSelection.classList.add('hidden');
+                patrolMainView.classList.add('hidden');
+                loadPatrolCommunities();
+            }
+            
+            if (pageName === 'settings' && currentUserProfile.role === '管理員') {
+                loadCommunities();
+                loadUsersForAdmin();
+            }
+            if (pageName === 'data') loadDataLogs();
+        }
+        navButtons.forEach(btn => btn.addEventListener('click', () => showPage(btn.dataset.page)));
+
+        // --- 設定頁面: 新增社區 Modal ---
+        const showAddCommunityModalButton = document.getElementById('show-add-community-modal-button');
+        const closeAddCommunityModalButton = document.getElementById('close-add-community-modal-button');
+        const addCommunityForm = document.getElementById('add-community-form');
+        const communityMapContainer = document.getElementById('community-map-container');
+        const addPatrolPointButton = document.getElementById('add-patrol-point-button');
+        const addScheduleButton = document.getElementById('add-schedule-button');
+        const patrolPointsContainer = document.getElementById('patrol-points-container');
+        const scheduleContainer = document.getElementById('schedule-container');
+
+        const hideAddCommunityModal = () => {
+            addCommunityModal.classList.add('hidden');
+            addCommunityForm.reset();
+            patrolPointsContainer.innerHTML = '';
+            scheduleContainer.innerHTML = '';
+            if (communitySetupMap) { communitySetupMap.remove(); communitySetupMap = null; }
+        };
+
+        const addPatrolPointInput = () => {
+             const pointId = Date.now();
+             const newPointDiv = document.createElement('div');
+             newPointDiv.id = `point-${pointId}`;
+             newPointDiv.className = 'grid grid-cols-1 md:grid-cols-3 gap-2 items-center';
+             newPointDiv.innerHTML = `
+                <input type="text" placeholder="編號" class="patrol-point-id input text-sm p-2" required>
+                <input type="text" placeholder="巡邏點名稱" class="patrol-point-name input text-sm p-2" required>
+                <div class="flex items-center gap-1">
+                    <input type="text" placeholder="說明" class="patrol-point-desc input text-sm p-2 flex-grow">
+                    <input type="hidden" class="patrol-point-lat">
+                    <input type="hidden" class="patrol-point-lng">
+                    <button type="button" class="set-location-btn p-1 bg-gray-200 rounded text-xs">定位</button>
+                    <button type="button" class="text-red-500 hover:text-red-700 p-1" onclick="this.parentNode.parentNode.remove()">×</button>
+                </div>
+            `;
+            patrolPointsContainer.appendChild(newPointDiv);
+        };
+        
+        const addScheduleInput = () => {
+            const scheduleId = Date.now();
+            const newScheduleDiv = document.createElement('div');
+            newScheduleDiv.id = `schedule-${scheduleId}`;
+            newScheduleDiv.className = 'grid grid-cols-1 md:grid-cols-2 gap-2 items-center';
+            newScheduleDiv.innerHTML = `
+                <input type="time" class="schedule-time input text-sm p-2" required>
+                <div class="flex items-center gap-1">
+                    <select class="schedule-user input bg-white text-sm p-2 flex-grow">
+                        ${allUsers.map(u => `<option value="${u.id}">${u.name}</option>`).join('')}
+                    </select>
+                    <button type="button" class="text-red-500 hover:text-red-700 p-1" onclick="this.parentNode.parentNode.remove()">×</button>
+                </div>
+            `;
+            scheduleContainer.appendChild(newScheduleDiv);
+        };
+
+        showAddCommunityModalButton.addEventListener('click', () => {
+            addCommunityModal.classList.remove('hidden');
+            setTimeout(() => {
+                communitySetupMap = L.map(communityMapContainer).setView([25.0330, 121.5654], 13); // Default to Taipei
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(communitySetupMap);
+                communitySetupMap.on('click', (e) => {
+                    const { lat, lng } = e.latlng;
+                    document.getElementById('community-lat-input').value = lat;
+                    document.getElementById('community-lng-input').value = lng;
+                    if (communityMarker) { communityMarker.setLatLng(e.latlng); }
+                    else { communityMarker = L.marker(e.latlng).addTo(communitySetupMap); }
+                });
+            }, 100);
+            addPatrolPointInput();
+            addScheduleInput();
+        });
+        
+        closeAddCommunityModalButton.addEventListener('click', hideAddCommunityModal);
+        addPatrolPointButton.addEventListener('click', addPatrolPointInput);
+        addScheduleButton.addEventListener('click', addScheduleInput);
+
+        // ... Other event listeners and functions will go here ...
+
+        // --- 初始化 ---
+        const clockDateEl = document.getElementById('clock-date');
+        const clockTimeEl = document.getElementById('clock-time');
+        function updateClock() {
+            const now = new Date();
+            clockDateEl.textContent = now.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+            clockTimeEl.textContent = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const rememberedEmail = localStorage.getItem('rememberedEmail');
+            if (rememberedEmail) {
+                emailInput.value = rememberedEmail;
+                rememberMeCheckbox.checked = true;
+            }
+            updateClock();
+            setInterval(updateClock, 1000);
+        });
     </script>
 </body>
 </html>
