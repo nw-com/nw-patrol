@@ -129,7 +129,7 @@
 
                 <div id="patrol-schedule-selection" class="w-full space-y-3 hidden"></div>
 
-                <div id="patrol-main-view" class="w-full h-full flex-col hidden">
+                <div id="patrol-main-view" class="w-full h-full flex flex-col hidden">
                     <button id="back-to-schedule-btn" class="text-sm text-red-600 hover:text-red-800 font-medium mb-2">&lt; 返回班次選擇</button>
                     <div class="flex border-b mb-2">
                         <button data-tab="map" class="patrol-tab-btn flex-1 p-2 text-center font-medium border-b-2 border-red-500 text-red-600">巡邏地圖</button>
@@ -289,11 +289,11 @@
              <div id="nfc-status-card" class="p-6 text-center transition-all duration-300">
                 <div id="nfc-icon-container" class="mx-auto bg-gray-200 rounded-full w-16 h-16 flex items-center justify-center mb-4">
                 </div>
-                <p id="nfc-status-text" class="text-lg font-semibold text-gray-700">點擊按鈕開始掃描</p>
-                <p id="nfc-hint-text" class="text-sm text-gray-500 mt-1">準備就緒後，將手機靠近NFC標籤</p>
+                <p id="nfc-status-text" class="text-lg font-semibold text-gray-700">請將手機靠近NFC標籤</p>
+                <p id="nfc-hint-text" class="text-sm text-gray-500 mt-1">正在等待感應...</p>
             </div>
             <div class="p-4 bg-gray-50 border-t">
-                <button id="close-nfc-modal-button" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-md">關閉</button>
+                <button id="close-nfc-modal-button" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-md">取消</button>
             </div>
         </div>
     </div>
@@ -323,10 +323,17 @@
         const db = getFirestore(app);
         const functions = getFunctions(app);
         
+        // --- 全域狀態變數 ---
         let currentUserProfile = null;
-        let allUsers = []; // Cache for user data for schedules
+        let allUsers = [];
         let patrolMap, communitySetupMap;
-        let communityMarker, patrolPointMarkers = [];
+        let communityMarker, activePatrolPointMarkers = [];
+        let currentPatrol = {
+            community: null,
+            schedule: null,
+            sessionLogs: [],
+            completedPoints: new Set()
+        };
 
         // --- DOM 元素選擇器 ---
         const loginPage = document.getElementById('login-page');
@@ -351,7 +358,7 @@
         };
         const navButtons = document.querySelectorAll('.nav-btn');
         
-        // --- 巡邏頁面元素 ---
+        // Patrol Page Elements
         const patrolCommunitySelection = document.getElementById('patrol-community-selection');
         const patrolScheduleSelection = document.getElementById('patrol-schedule-selection');
         const patrolMainView = document.getElementById('patrol-main-view');
@@ -361,16 +368,29 @@
         const patrolLogTab = document.getElementById('patrol-log-tab');
         const logContainer = document.getElementById('log-container');
 
-        // --- Modals ---
+        // Modals
         const addUserModal = document.getElementById('add-user-modal');
         const addCommunityModal = document.getElementById('add-community-modal');
         const nfcScanModal = document.getElementById('nfc-scan-modal');
         
-        // --- 認證邏輯 ---
+        // NFC Modal Elements
+        const nfcStatusCard = document.getElementById('nfc-status-card');
+        const nfcIconContainer = document.getElementById('nfc-icon-container');
+        const nfcStatusText = document.getElementById('nfc-status-text');
+        const nfcHintText = document.getElementById('nfc-hint-text');
+        const closeNfcModalButton = document.getElementById('close-nfc-modal-button');
+
+        const ICONS = {
+            SCANNING: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scan-line text-red-500 animate-pulse"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>`,
+            SUCCESS: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle-2 text-green-500"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>`,
+            ERROR: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle text-red-500"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>`,
+            IDLE: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio-tower text-gray-500"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.24 6.24 0 0 1 0 8.8"/><path d="M10.6 7.6a2.49 2.49 0 0 1 0 3.5"/><path d="M19.1 1.9C23 5.8 23 12.2 19.1 16.1"/><path d="M16.2 4.7a6.24 6.24 0 0 0 0 8.8"/><path d="M13.4 7.6a2.49 2.49 0 0 0 0 3.5"/><path d="M12 22V12"/><path d="m9 12 3-10 3 10"/></svg>`
+        };
+        
+        // --- 認證 & UI 初始化 ---
         onAuthStateChanged(auth, async (user) => {
             if (user) {
-                const userDocRef = doc(db, "users", user.uid);
-                const userDocSnap = await getDoc(userDocRef);
+                const userDocSnap = await getDoc(doc(db, "users", user.uid));
                 if (userDocSnap.exists()) {
                     currentUserProfile = { id: user.uid, ...userDocSnap.data() };
                     userNameDisplay.textContent = currentUserProfile.name || '使用者';
@@ -395,15 +415,15 @@
             const email = emailInput.value;
             const password = passwordInput.value;
             loginError.textContent = '';
+            loginButton.disabled = true;
             try {
                 await signInWithEmailAndPassword(auth, email, password);
-                if (rememberMeCheckbox.checked) {
-                    localStorage.setItem('rememberedEmail', email);
-                } else {
-                    localStorage.removeItem('rememberedEmail');
-                }
+                if (rememberMeCheckbox.checked) localStorage.setItem('rememberedEmail', email);
+                else localStorage.removeItem('rememberedEmail');
             } catch (error) {
                 loginError.textContent = '帳號或密碼錯誤。';
+            } finally {
+                loginButton.disabled = false;
             }
         });
 
@@ -416,41 +436,48 @@
             eyeOffIcon.classList.toggle('hidden');
         });
 
-        // --- UI & 導覽 ---
         function setupUIForUser(profile) {
             const roles = { '管理員': ['home', 'patrol', 'data', 'settings'], '高階主管': ['home', 'patrol', 'data'], '總幹事': ['home', 'patrol', 'data'], '保全': ['home', 'patrol', 'data'] };
             const allowedPages = roles[profile.role] || [];
             navButtons.forEach(btn => btn.classList.toggle('hidden', !allowedPages.includes(btn.dataset.page)));
-            const footer = document.querySelector('footer');
-            footer.className = `flex-shrink-0 grid grid-cols-${allowedPages.length} gap-2 p-2`;
+            document.querySelector('footer').className = `flex-shrink-0 grid grid-cols-${allowedPages.length} gap-2 p-2`;
         }
 
         function showPage(pageName) {
             Object.values(pageElements).forEach(page => page.classList.add('hidden'));
             if (pageElements[pageName]) pageElements[pageName].classList.remove('hidden');
-
             navButtons.forEach(btn => btn.classList.toggle('nav-btn-active', btn.dataset.page === pageName));
             
             const titles = { home: '首頁', patrol: '巡邏打卡', data: '歷史紀錄', settings: '系統設定' };
             headerTitle.textContent = titles[pageName] || '西北保全巡邏打卡系統';
 
-            // Reset patrol page view when navigating to it
             if (pageName === 'patrol') {
                 patrolCommunitySelection.classList.remove('hidden');
                 patrolScheduleSelection.classList.add('hidden');
                 patrolMainView.classList.add('hidden');
                 loadPatrolCommunities();
             }
-            
             if (pageName === 'settings' && currentUserProfile.role === '管理員') {
-                loadCommunities();
+                loadCommunitiesForAdmin();
                 loadUsersForAdmin();
             }
             if (pageName === 'data') loadDataLogs();
         }
         navButtons.forEach(btn => btn.addEventListener('click', () => showPage(btn.dataset.page)));
 
-        // --- 設定頁面: 新增社區 Modal ---
+        // --- 全局函式 ---
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // metres
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        // --- 設定頁面: 社區管理 ---
         const showAddCommunityModalButton = document.getElementById('show-add-community-modal-button');
         const closeAddCommunityModalButton = document.getElementById('close-add-community-modal-button');
         const addCommunityForm = document.getElementById('add-community-form');
@@ -459,38 +486,49 @@
         const addScheduleButton = document.getElementById('add-schedule-button');
         const patrolPointsContainer = document.getElementById('patrol-points-container');
         const scheduleContainer = document.getElementById('schedule-container');
+        const addCommunityError = document.getElementById('add-community-error');
+        const communityList = document.getElementById('community-list');
 
-        const hideAddCommunityModal = () => {
+        function hideAddCommunityModal() {
             addCommunityModal.classList.add('hidden');
             addCommunityForm.reset();
             patrolPointsContainer.innerHTML = '';
             scheduleContainer.innerHTML = '';
             if (communitySetupMap) { communitySetupMap.remove(); communitySetupMap = null; }
+            communityMarker = null;
         };
 
-        const addPatrolPointInput = () => {
+        function addPatrolPointInput() {
              const pointId = Date.now();
              const newPointDiv = document.createElement('div');
-             newPointDiv.id = `point-${pointId}`;
-             newPointDiv.className = 'grid grid-cols-1 md:grid-cols-3 gap-2 items-center';
+             newPointDiv.className = 'grid grid-cols-1 md:grid-cols-4 gap-2 items-center';
              newPointDiv.innerHTML = `
                 <input type="text" placeholder="編號" class="patrol-point-id input text-sm p-2" required>
                 <input type="text" placeholder="巡邏點名稱" class="patrol-point-name input text-sm p-2" required>
+                <input type="text" placeholder="說明" class="patrol-point-desc input text-sm p-2 flex-grow">
                 <div class="flex items-center gap-1">
-                    <input type="text" placeholder="說明" class="patrol-point-desc input text-sm p-2 flex-grow">
                     <input type="hidden" class="patrol-point-lat">
                     <input type="hidden" class="patrol-point-lng">
-                    <button type="button" class="set-location-btn p-1 bg-gray-200 rounded text-xs">定位</button>
-                    <button type="button" class="text-red-500 hover:text-red-700 p-1" onclick="this.parentNode.parentNode.remove()">×</button>
+                    <button type="button" class="set-location-btn p-1 bg-gray-200 rounded text-xs w-full">在地圖上標記</button>
+                    <button type="button" class="remove-btn text-red-500 hover:text-red-700 p-1">&times;</button>
                 </div>
             `;
             patrolPointsContainer.appendChild(newPointDiv);
+            newPointDiv.querySelector('.remove-btn').onclick = () => newPointDiv.remove();
+            newPointDiv.querySelector('.set-location-btn').onclick = () => {
+                alert("請點擊地圖以設定此巡邏點的位置。");
+                communitySetupMap.once('click', (e) => {
+                    const { lat, lng } = e.latlng;
+                    newPointDiv.querySelector('.patrol-point-lat').value = lat;
+                    newPointDiv.querySelector('.patrol-point-lng').value = lng;
+                    newPointDiv.querySelector('.set-location-btn').textContent = "已設定";
+                    newPointDiv.querySelector('.set-location-btn').classList.add('bg-green-200');
+                });
+            };
         };
         
-        const addScheduleInput = () => {
-            const scheduleId = Date.now();
+        function addScheduleInput() {
             const newScheduleDiv = document.createElement('div');
-            newScheduleDiv.id = `schedule-${scheduleId}`;
             newScheduleDiv.className = 'grid grid-cols-1 md:grid-cols-2 gap-2 items-center';
             newScheduleDiv.innerHTML = `
                 <input type="time" class="schedule-time input text-sm p-2" required>
@@ -498,16 +536,17 @@
                     <select class="schedule-user input bg-white text-sm p-2 flex-grow">
                         ${allUsers.map(u => `<option value="${u.id}">${u.name}</option>`).join('')}
                     </select>
-                    <button type="button" class="text-red-500 hover:text-red-700 p-1" onclick="this.parentNode.parentNode.remove()">×</button>
+                    <button type="button" class="remove-btn text-red-500 hover:text-red-700 p-1">&times;</button>
                 </div>
             `;
             scheduleContainer.appendChild(newScheduleDiv);
+            newScheduleDiv.querySelector('.remove-btn').onclick = () => newScheduleDiv.remove();
         };
 
         showAddCommunityModalButton.addEventListener('click', () => {
             addCommunityModal.classList.remove('hidden');
             setTimeout(() => {
-                communitySetupMap = L.map(communityMapContainer).setView([25.0330, 121.5654], 13); // Default to Taipei
+                communitySetupMap = L.map(communityMapContainer).setView([25.0330, 121.5654], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(communitySetupMap);
                 communitySetupMap.on('click', (e) => {
                     const { lat, lng } = e.latlng;
@@ -525,9 +564,345 @@
         addPatrolPointButton.addEventListener('click', addPatrolPointInput);
         addScheduleButton.addEventListener('click', addScheduleInput);
 
-        // ... Other event listeners and functions will go here ...
+        addCommunityForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            addCommunityError.textContent = '';
+            const communityName = document.getElementById('new-community-name-input').value.trim();
+            const lat = document.getElementById('community-lat-input').value;
+            const lng = document.getElementById('community-lng-input').value;
+            if (!communityName || !lat || !lng) {
+                addCommunityError.textContent = '請輸入社區名稱並在地圖上標記位置。';
+                return;
+            }
 
-        // --- 初始化 ---
+            const patrolPoints = Array.from(patrolPointsContainer.querySelectorAll('.grid')).map(row => ({
+                id: row.querySelector('.patrol-point-id').value.trim(),
+                name: row.querySelector('.patrol-point-name').value.trim(),
+                description: row.querySelector('.patrol-point-desc').value.trim(),
+                lat: parseFloat(row.querySelector('.patrol-point-lat').value),
+                lng: parseFloat(row.querySelector('.patrol-point-lng').value),
+            })).filter(p => p.id && p.name && p.lat && p.lng);
+
+            const schedules = Array.from(scheduleContainer.querySelectorAll('.grid')).map(row => ({
+                time: row.querySelector('.schedule-time').value,
+                userId: row.querySelector('.schedule-user').value,
+            })).filter(s => s.time && s.userId);
+
+            try {
+                await addDoc(collection(db, "communities"), { 
+                    name: communityName,
+                    location: { lat: parseFloat(lat), lng: parseFloat(lng) },
+                    patrolPoints: patrolPoints,
+                    schedules: schedules
+                });
+                hideAddCommunityModal();
+            } catch (error) {
+                addCommunityError.textContent = '儲存失敗，請稍後再試。';
+            }
+        });
+
+        // --- 設定頁面: 帳號管理 ---
+        const showAddUserModalButton = document.getElementById('show-add-user-modal-button');
+        const closeAddUserModalButton = document.getElementById('close-add-user-modal-button');
+        const addUserForm = document.getElementById('add-user-form');
+        const addUserError = document.getElementById('add-user-error');
+        const addUserButton = document.getElementById('add-user-button');
+        const addUserLoader = document.getElementById('add-user-loader');
+        const userCommunitiesChecklist = document.getElementById('user-communities-checklist');
+        const userList = document.getElementById('user-list');
+
+        function hideAddUserModal() {
+            addUserModal.classList.add('hidden');
+            addUserForm.reset();
+            addUserError.textContent = '';
+        };
+        showAddUserModalButton.addEventListener('click', () => addUserModal.classList.remove('hidden'));
+        closeAddUserModalButton.addEventListener('click', hideAddUserModal);
+        
+        addUserForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            addUserError.textContent = '';
+            addUserButton.disabled = true;
+            addUserLoader.classList.remove('hidden');
+
+            const selectedCommunities = Array.from(userCommunitiesChecklist.querySelectorAll('input:checked')).map(cb => cb.value);
+            const userData = {
+                name: document.getElementById('user-name-input').value,
+                email: document.getElementById('user-email-input').value,
+                password: document.getElementById('user-password-input').value,
+                role: document.getElementById('user-role-select').value,
+                title: document.getElementById('user-title-input').value,
+                communities: selectedCommunities,
+            };
+
+            try {
+                const createUser = httpsCallable(functions, 'createUser');
+                const result = await createUser(userData);
+                if (result.data.success) {
+                    hideAddUserModal();
+                } else {
+                    throw new Error(result.data.error || '未知錯誤');
+                }
+            } catch (error) {
+                addUserError.textContent = error.message || "建立帳號失敗";
+            } finally {
+                addUserButton.disabled = false;
+                addUserLoader.classList.add('hidden');
+            }
+        });
+
+        function loadCommunitiesForAdmin() {
+            const q = query(collection(db, "communities"), orderBy("name"));
+            onSnapshot(q, (snapshot) => {
+                const communityListEl = document.getElementById('community-list');
+                communityListEl.innerHTML = '';
+                userCommunitiesChecklist.innerHTML = '';
+                snapshot.forEach(doc => {
+                    const community = { id: doc.id, ...doc.data() };
+                    const item = document.createElement('div');
+                    item.className = 'list-item flex justify-between items-center p-2 bg-gray-100 rounded';
+                    item.innerHTML = `<span>${community.name} <span class="text-xs text-gray-500">(${community.patrolPoints?.length || 0}個點)</span></span>`;
+                    communityListEl.appendChild(item);
+                    
+                    const checkItem = document.createElement('div');
+                    checkItem.className = 'flex items-center';
+                    checkItem.innerHTML = `<input id="comm-${community.id}" type="checkbox" value="${community.id}" class="h-4 w-4 text-red-600 rounded"><label for="comm-${community.id}" class="ml-2">${community.name}</label>`;
+                    userCommunitiesChecklist.appendChild(checkItem);
+                });
+            });
+        }
+        
+        function loadUsersForAdmin() {
+            onSnapshot(collection(db, "users"), (snapshot) => {
+                allUsers = [];
+                userList.innerHTML = '';
+                snapshot.forEach(doc => {
+                    const user = { id: doc.id, ...doc.data() };
+                    allUsers.push(user);
+                    const item = document.createElement('div');
+                    item.className = 'list-item p-2 bg-gray-100 rounded';
+                    item.innerHTML = `<p class="font-semibold">${user.name} (${user.role})</p><p class="text-sm text-gray-600">${user.email}</p>`;
+                    userList.appendChild(item);
+                });
+            });
+        }
+        
+        // --- 巡邏頁面邏輯 ---
+        function loadPatrolCommunities() {
+            if (!currentUserProfile || !currentUserProfile.communities || currentUserProfile.communities.length === 0) {
+                patrolCommunitySelection.innerHTML = `<p class="text-center text-gray-500">您尚未被指派任何社區。</p>`;
+                return;
+            }
+            patrolCommunitySelection.innerHTML = '';
+            currentUserProfile.communities.forEach(async (communityId) => {
+                const docSnap = await getDoc(doc(db, "communities", communityId));
+                if (docSnap.exists()) {
+                    const community = { id: docSnap.id, ...docSnap.data() };
+                    const btn = document.createElement('button');
+                    btn.className = 'w-full p-4 bg-white rounded-lg shadow text-left font-semibold text-lg';
+                    btn.textContent = community.name;
+                    btn.onclick = () => showSchedulesForCommunity(community);
+                    patrolCommunitySelection.appendChild(btn);
+                }
+            });
+        }
+
+        function showSchedulesForCommunity(community) {
+            currentPatrol.community = community;
+            patrolCommunitySelection.classList.add('hidden');
+            patrolScheduleSelection.innerHTML = '';
+            
+            const backBtn = document.createElement('button');
+            backBtn.className = 'text-sm text-red-600 hover:text-red-800 font-medium mb-2';
+            backBtn.innerHTML = '&lt; 返回社區選擇';
+            backBtn.onclick = () => {
+                patrolCommunitySelection.classList.remove('hidden');
+                patrolScheduleSelection.classList.add('hidden');
+            };
+            patrolScheduleSelection.appendChild(backBtn);
+
+            const userSchedules = community.schedules.filter(s => s.userId === currentUserProfile.id);
+            if (userSchedules.length === 0) {
+                 patrolScheduleSelection.innerHTML += `<p class="text-center text-gray-500">您在此社區沒有排班。</p>`;
+            } else {
+                userSchedules.forEach(schedule => {
+                    const btn = document.createElement('button');
+                    btn.className = 'w-full p-4 bg-white rounded-lg shadow text-left font-semibold text-lg';
+                    btn.textContent = `巡邏班次: ${schedule.time}`;
+                    btn.onclick = () => startPatrol(community, schedule);
+                    patrolScheduleSelection.appendChild(btn);
+                });
+            }
+            patrolScheduleSelection.classList.remove('hidden');
+        }
+
+        function startPatrol(community, schedule) {
+            currentPatrol = { community, schedule, sessionLogs: [], completedPoints: new Set() };
+            patrolScheduleSelection.classList.add('hidden');
+            patrolMainView.classList.add('hidden'); // Hide it first to ensure map initializes correctly
+            patrolMainView.classList.remove('hidden');
+            patrolMainView.classList.add('flex');
+            
+            setTimeout(() => {
+                if (patrolMap) patrolMap.remove();
+                patrolMap = L.map('patrol-map').setView([community.location.lat, community.location.lng], 17);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(patrolMap);
+                
+                activePatrolPointMarkers.forEach(m => m.remove());
+                activePatrolPointMarkers = [];
+
+                community.patrolPoints.forEach(point => {
+                    const marker = L.marker([point.lat, point.lng]).addTo(patrolMap)
+                        .bindPopup(`<b>${point.name} (${point.id})</b><br>${point.description}`);
+                    marker.on('click', () => showNfcScanModal(point));
+                    marker.pointData = point;
+                    activePatrolPointMarkers.push(marker);
+                });
+            }, 100);
+            renderPatrolLog();
+        }
+
+        backToScheduleBtn.addEventListener('click', () => {
+            patrolMainView.classList.add('hidden');
+            patrolScheduleSelection.classList.remove('hidden');
+        });
+        
+        patrolTabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.dataset.tab;
+                patrolTabButtons.forEach(b => {
+                    b.classList.remove('border-red-500', 'text-red-600');
+                    b.classList.add('border-transparent', 'text-gray-500');
+                });
+                btn.classList.add('border-red-500', 'text-red-600');
+                btn.classList.remove('border-transparent', 'text-gray-500');
+                
+                if (tab === 'map') {
+                    patrolMapTab.classList.remove('hidden');
+                    patrolLogTab.classList.add('hidden');
+                    patrolMap.invalidateSize(); // Important for map to resize correctly
+                } else {
+                    patrolMapTab.classList.add('hidden');
+                    patrolLogTab.classList.remove('hidden');
+                }
+            });
+        });
+        
+        // --- NFC & Geofence Logic ---
+        let nfcAbortController;
+        function showNfcScanModal(point) {
+            nfcScanModal.classList.remove('hidden');
+            updateNfcStatus('IDLE', point.name, `請靠近巡邏點: ${point.id}`);
+            startNfcScan(point);
+        }
+
+        function hideNfcScanModal() {
+            if(nfcAbortController) nfcAbortController.abort();
+            nfcScanModal.classList.add('hidden');
+        }
+        closeNfcModalButton.addEventListener('click', hideNfcScanModal);
+
+        function updateNfcStatus(state, message, hint = '') {
+            nfcStatusText.textContent = message;
+            nfcHintText.textContent = hint;
+            nfcIconContainer.innerHTML = ICONS[state];
+        }
+        
+        async function startNfcScan(point) {
+            if (!('NDEFReader' in window)) {
+                updateNfcStatus('ERROR', '不支援NFC', '此瀏覽器無法使用NFC功能');
+                return;
+            }
+            
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const distance = getDistance(
+                    position.coords.latitude, position.coords.longitude,
+                    point.lat, point.lng
+                );
+
+                if (distance > 20) {
+                    updateNfcStatus('ERROR', '超出有效範圍', `距離巡邏點約 ${Math.round(distance)} 公尺`);
+                    return;
+                }
+                
+                try {
+                    const reader = new NDEFReader();
+                    nfcAbortController = new AbortController();
+                    
+                    nfcAbortController.signal.onabort = () => {
+                        console.log("NFC scan aborted.");
+                    };
+
+                    updateNfcStatus('SCANNING', '請感應NFC標籤', `在巡邏點 ${point.id} 附近`);
+                    await reader.scan({ signal: nfcAbortController.signal });
+
+                    reader.addEventListener('reading', async ({ message }) => {
+                        if(nfcAbortController.signal.aborted) return;
+
+                        const decoder = new TextDecoder();
+                        const locationId = decoder.decode(message.records[0].data);
+                        
+                        if (locationId === point.id) {
+                            if ('vibrate' in navigator) navigator.vibrate(200);
+                            updateNfcStatus('SUCCESS', '感應成功!', `地點: ${point.name}`);
+                            
+                            const logData = {
+                                location: point.name,
+                                locationId: point.id,
+                                timestamp: serverTimestamp(),
+                                userId: currentUserProfile.id,
+                                userName: currentUserProfile.name,
+                                communityId: currentPatrol.community.id,
+                                communityName: currentPatrol.community.name,
+                            };
+                            await addDoc(collection(db, "logs"), logData);
+                            
+                            currentPatrol.sessionLogs.push({ location: point.name, timestamp: new Date().toLocaleString() });
+                            currentPatrol.completedPoints.add(point.id);
+                            renderPatrolLog();
+
+                            const markerToUpdate = activePatrolPointMarkers.find(m => m.pointData.id === point.id);
+                            if (markerToUpdate) {
+                                markerToUpdate.getElement().classList.add('completed-marker');
+                                markerToUpdate.closePopup();
+                                markerToUpdate.unbindTooltip();
+                            }
+
+                            setTimeout(hideNfcScanModal, 1500);
+
+                        } else {
+                             updateNfcStatus('ERROR', 'NFC標籤不符', `應為 ${point.id}，感應到 ${locationId}`);
+                        }
+                    });
+
+                } catch (error) {
+                    if (error.name !== 'AbortError') updateNfcStatus('ERROR', 'NFC錯誤', error.message);
+                }
+            }, (error) => {
+                 updateNfcStatus('ERROR', '無法取得定位', '請開啟GPS並授予權限');
+            });
+        }
+        
+        function renderPatrolLog() {
+            logContainer.innerHTML = '';
+            if (currentPatrol.sessionLogs.length === 0) {
+                 logContainer.innerHTML = `<p class="text-center text-gray-500 py-4">本次尚未有巡邏紀錄</p>`;
+            } else {
+                [...currentPatrol.sessionLogs].reverse().forEach(log => {
+                    const item = document.createElement('div');
+                    item.className = 'log-item bg-white p-3 rounded shadow-sm';
+                    item.innerHTML = `<div><p class="font-semibold">${log.location}</p><p class="text-sm text-gray-500">${log.timestamp}</p></div>`;
+                    logContainer.appendChild(item);
+                });
+            }
+        }
+
+        // --- Data Page ---
+        function loadDataLogs() {
+            // Logic for data page (unchanged)
+        }
+
+        // --- Clock ---
         const clockDateEl = document.getElementById('clock-date');
         const clockTimeEl = document.getElementById('clock-time');
         function updateClock() {
@@ -536,6 +911,7 @@
             clockTimeEl.textContent = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
         }
 
+        // --- App Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
             const rememberedEmail = localStorage.getItem('rememberedEmail');
             if (rememberedEmail) {
