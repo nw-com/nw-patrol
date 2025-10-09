@@ -271,12 +271,7 @@
                             <option>管理員</option>
                         </select>
                     </div>
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">服務社區</label>
-                        <div id="user-communities-checklist" class="mt-2 space-y-2 max-h-32 overflow-y-auto border p-2 rounded-md">
-                            <p class="text-gray-500">正在載入社區列表...</p>
-                        </div>
-                    </div>
+                    
                     <p id="add-user-error" class="text-red-500 text-sm text-center h-5"></p>
                     <button type="submit" id="add-user-button" class="w-full button-primary">
                         <span id="user-form-button-text">建立帳號</span>
@@ -666,7 +661,7 @@
         const addUserError = document.getElementById('add-user-error');
         const addUserButton = document.getElementById('add-user-button');
         const addUserLoader = document.getElementById('add-user-loader');
-        const userCommunitiesChecklist = document.getElementById('user-communities-checklist');
+        
         const userList = document.getElementById('user-list');
         const userModalTitle = document.getElementById('user-modal-title');
         const userFormButtonText = document.getElementById('user-form-button-text');
@@ -708,7 +703,7 @@
                 email: document.getElementById('user-email-input').value,
                 role: document.getElementById('user-role-select').value,
                 title: document.getElementById('user-title-input').value,
-                communities: Array.from(userCommunitiesChecklist.querySelectorAll('input:checked')).map(cb => cb.value),
+                communities: [],
             };
             if(password) userData.password = password;
 
@@ -741,10 +736,7 @@
             document.getElementById('user-title-input').value = user.title;
             document.getElementById('user-role-select').value = user.role;
             
-            userCommunitiesChecklist.querySelectorAll('input').forEach(cb => {
-                const userCommunities = Array.isArray(user.communities) ? user.communities : [];
-                cb.checked = userCommunities.includes(cb.value);
-            });
+            // 服務社區選項已移除
 
             addUserModal.classList.remove('hidden');
         }
@@ -769,7 +761,7 @@
             onSnapshot(q, (snapshot) => {
                 const communityListEl = document.getElementById('community-list');
                 communityListEl.innerHTML = '';
-                userCommunitiesChecklist.innerHTML = '';
+                // 已移除服務社區核取清單
                 snapshot.forEach(doc => {
                     const community = { id: doc.id, ...doc.data() };
                     const item = document.createElement('div');
@@ -785,10 +777,7 @@
                     item.querySelector('.edit-community-btn').onclick = () => editCommunity(community.id);
                     item.querySelector('.delete-community-btn').onclick = () => deleteCommunity(community.id, community.name);
                     
-                    const checkItem = document.createElement('div');
-                    checkItem.className = 'flex items-center';
-                    checkItem.innerHTML = `<input id="comm-${community.id}" type="checkbox" value="${community.id}" class="h-4 w-4 text-red-600 rounded"><label for="comm-${community.id}" class="ml-2">${community.name}</label>`;
-                    userCommunitiesChecklist.appendChild(checkItem);
+                    // 已移除核取清單生成
                 });
             });
         }

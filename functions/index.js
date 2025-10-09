@@ -45,6 +45,7 @@ exports.createUser = functions.region('us-central1').https.onCall(async (data, c
     await ensureAdmin(context);
 
     const {email, password, name, role, title, communities} = data;
+    console.log('[createUser] invoked by', context.auth?.uid, 'payload:', { email, name, role, title, communitiesCount: Array.isArray(communities) ? communities.length : 0 });
     if (!email || !password || !name || !role || !title) {
         throw new functions.https.HttpsError("invalid-argument", "缺少必要欄位。");
     }
@@ -74,6 +75,7 @@ exports.updateUser = functions.region('us-central1').https.onCall(async (data, c
     await ensureAdmin(context);
 
     const {uid, name, role, title, communities, password} = data;
+    console.log('[updateUser] invoked by', context.auth?.uid, 'target:', uid, 'payload:', { name, role, title, setPassword: !!password, communitiesCount: Array.isArray(communities) ? communities.length : 0 });
     if (!uid || !name || !role || !title) {
         throw new functions.https.HttpsError("invalid-argument", "缺少必要欄位 (uid, name, role, title)。");
     }
@@ -107,6 +109,7 @@ exports.deleteUser = functions.region('us-central1').https.onCall(async (data, c
     await ensureAdmin(context);
 
     const {uid} = data;
+    console.log('[deleteUser] invoked by', context.auth?.uid, 'target:', uid);
     if (!uid) {
         throw new functions.https.HttpsError("invalid-argument", "缺少使用者 UID。");
     }
@@ -143,6 +146,7 @@ exports.httpCreateUser = functions.region('us-central1').https.onRequest((req, r
     try {
       await ensureAdminFromRequest(req);
       const { email, password, name, role, title, communities } = (req.body && req.body.data) || {};
+      console.log('[httpCreateUser] invoked via HTTP, auth header:', !!req.headers.authorization, 'payload:', { email, name, role, title, communitiesCount: Array.isArray(communities) ? communities.length : 0 });
       if (!email || !password || !name || !role || !title) {
         const err = new Error("缺少必要欄位。"); err.code = "invalid-argument"; throw err;
       }
@@ -163,6 +167,7 @@ exports.httpUpdateUser = functions.region('us-central1').https.onRequest((req, r
     try {
       await ensureAdminFromRequest(req);
       const { uid, name, role, title, communities, password } = (req.body && req.body.data) || {};
+      console.log('[httpUpdateUser] invoked via HTTP, target:', uid, 'payload:', { name, role, title, setPassword: !!password, communitiesCount: Array.isArray(communities) ? communities.length : 0 });
       if (!uid || !name || !role || !title) { const err = new Error("缺少必要欄位 (uid, name, role, title)。"); err.code = 'invalid-argument'; throw err; }
       await admin.firestore().collection('users').doc(uid).update({ name, role, title, communities: communities || [] });
       const authUpdates = { displayName: name };
@@ -184,6 +189,7 @@ exports.httpDeleteUser = functions.region('us-central1').https.onRequest((req, r
     try {
       await ensureAdminFromRequest(req);
       const { uid } = (req.body && req.body.data) || {};
+      console.log('[httpDeleteUser] invoked via HTTP, target:', uid);
       if (!uid) { const err = new Error('缺少使用者 UID。'); err.code = 'invalid-argument'; throw err; }
       await admin.auth().deleteUser(uid);
       await admin.firestore().collection('users').doc(uid).delete();
