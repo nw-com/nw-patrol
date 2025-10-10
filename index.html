@@ -199,7 +199,23 @@
                     </div>
 
                     <div id="page-data" class="page-content hidden">
-                        <h2 class="text-2xl font-bold mb-4">今日巡邏紀錄</h2>
+                        <h2 class="text-2xl font-bold mb-4">巡邏紀錄查詢</h2>
+                         <!-- Filter Section -->
+                        <div id="data-filters" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-gray-50 p-4 rounded-lg">
+                            <div>
+                                <label for="data-filter-date" class="block text-sm font-medium text-gray-700">選擇日期</label>
+                                <input type="date" id="data-filter-date" class="mt-1 block w-full pl-3 pr-2 py-2 text-base border-gray-300 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm rounded-md">
+                            </div>
+                            <div id="data-community-filter-container" class="hidden">
+                                <label for="data-filter-community" class="block text-sm font-medium text-gray-700">依社區篩選</label>
+                                <select id="data-filter-community" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm rounded-md">
+                                    <!-- options will be populated by JS -->
+                                </select>
+                            </div>
+                            <div class="self-end">
+                                <button id="data-apply-filters-btn" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm">查詢紀錄</button>
+                            </div>
+                        </div>
                         <div id="data-logs-container" class="space-y-4">
                             <!-- Daily log summaries will be loaded here -->
                         </div>
@@ -559,6 +575,25 @@
             </form>
         </div>
     </div>
+    
+    <div id="patrol-map-modal" class="fixed inset-0 bg-white z-50 hidden">
+        <header class="h-16 bg-white border-b flex justify-between items-center px-4">
+            <h3 id="patrol-map-title" class="text-lg font-bold">巡邏地圖</h3>
+            <button id="close-patrol-map-btn" class="text-gray-600 hover:text-gray-900">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </header>
+        <div id="patrol-map-container" style="height: calc(100vh - 64px);"></div>
+    </div>
+
+    <div id="nfc-point-scan-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center hidden z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl text-center">
+            <h3 id="nfc-scan-point-name" class="text-xl font-bold mb-2"></h3>
+            <p class="text-gray-600 mb-4">請靠近對應的NFC標籤...</p>
+            <div id="nfc-scan-log" class="text-left text-sm text-gray-700 bg-gray-50 p-3 rounded-lg h-24 overflow-y-auto"></div>
+             <button id="close-nfc-scan-modal-btn" class="mt-4 px-4 py-2 bg-gray-200 text-gray-800 rounded-md">取消</button>
+        </div>
+    </div>
 
     <!-- Print container -->
     <div id="print-content-wrapper" class="hidden"></div>
@@ -606,7 +641,6 @@
         const welcomeButton = document.getElementById('welcome-button');
         const logoutPopup = document.getElementById('logout-popup');
         const mainFooter = document.getElementById('main-footer');
-        const nfcLog = document.getElementById('nfc-log');
         const nfcStatus = document.getElementById('nfc-status');
         const passwordInput = document.getElementById('password');
         const togglePasswordBtn = document.getElementById('toggle-password');
@@ -628,7 +662,9 @@
 
         // Patrol page elements
         const todaysPatrolsList = document.getElementById('todays-patrols-list');
-        const nfcScanArea = document.getElementById('nfc-scan-area');
+        const patrolMapModal = document.getElementById('patrol-map-modal');
+        const nfcPointScanModal = document.getElementById('nfc-point-scan-modal');
+        const nfcScanLog = document.getElementById('nfc-scan-log');
 
         // Data page elements
         const dataLogsContainer = document.getElementById('data-logs-container');
@@ -660,6 +696,9 @@
         let scanMarker = null;
         let locationCircle = null;
 
+        let patrolMap = null;
+        let patrolPointMarkers = {};
+
 
         // --- 權限設定 ---
         const ROLES = {
@@ -671,7 +710,7 @@
 
         const PAGE_PERMISSIONS = {
             'home': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF, ROLES.GUARD],
-            'patrol': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF, ROLES.GUARD],
+            'patrol': [ROLES.CHIEF, ROLES.GUARD],
             'data': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF, ROLES.GUARD],
             'schedule': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF],
             'settings': [ROLES.ADMIN]
@@ -778,6 +817,16 @@
             } else if (pageId === 'patrol') {
                 renderTodaysPatrols();
             } else if (pageId === 'data') {
+                const dataFilterDate = document.getElementById('data-filter-date');
+                dataFilterDate.value = new Date().toISOString().split('T')[0];
+
+                const dataCommunityFilterContainer = document.getElementById('data-community-filter-container');
+                if ([ROLES.ADMIN, ROLES.EXECUTIVE].includes(userProfile.role)) {
+                    dataCommunityFilterContainer.classList.remove('hidden');
+                    populateSelect(document.getElementById('data-filter-community'), getOptionsForSelect('communities', 'name'), '所有社區');
+                } else {
+                    dataCommunityFilterContainer.classList.add('hidden');
+                }
                 loadAndRenderDataPage();
             }
             
@@ -1194,8 +1243,7 @@
                 `;
                 card.querySelector('.start-patrol-btn').addEventListener('click', () => {
                     activePatrol = task;
-                    document.getElementById('nfc-scan-area-title').textContent = `${task.communityName} - ${task.patrolCode}`;
-                    
+                    document.getElementById('patrol-map-title').textContent = `巡邏地圖: ${task.patrolCode}`;
                     initializePatrolMap(task);
                 });
                 todaysPatrolsList.appendChild(card);
@@ -1204,62 +1252,76 @@
         
         // --- 資料頁面 ---
         async function loadAndRenderDataPage() {
-            dataLogsContainer.innerHTML = '<p class="text-gray-500">正在載入今日紀錄...</p>';
+            dataLogsContainer.innerHTML = '<p class="text-gray-500">正在載入紀錄...</p>';
             if (!userProfile) return;
 
-            const today = new Date();
-            const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-            const endOfDay = new Date(today.setHours(23, 59, 59, 999));
-            const todayIndex = new Date().getDay();
+            const selectedDateStr = document.getElementById('data-filter-date').value;
+            if (!selectedDateStr) {
+                dataLogsContainer.innerHTML = '<p class="text-red-500">請選擇一個日期進行查詢。</p>';
+                return;
+            }
 
-            // 1. Get relevant schedules for today
-            let schedulesQuery;
-            switch(userProfile.role) {
+            const selectedDate = new Date(selectedDateStr);
+            const startOfDay = new Date(selectedDate.setHours(0, 0, 0, 0));
+            const endOfDay = new Date(selectedDate.setHours(23, 59, 59, 999));
+            const selectedDayIndex = selectedDate.getDay();
+
+            // 1. Get relevant schedules for the selected day
+            let scheduleConstraints = [];
+            const communityFilterId = document.getElementById('data-filter-community').value;
+
+            switch (userProfile.role) {
                 case ROLES.GUARD:
-                    schedulesQuery = query(collection(db, "schedules"), where("userId", "==", currentUser.uid));
+                    scheduleConstraints.push(where("userId", "==", currentUser.uid));
                     break;
                 case ROLES.CHIEF:
-                    // Assuming Chief's profile has a communityId field. This needs to be added to user profiles.
                     if (userProfile.communityId) {
-                       schedulesQuery = query(collection(db, "schedules"), where("communityId", "==", userProfile.communityId));
+                        scheduleConstraints.push(where("communityId", "==", userProfile.communityId));
                     } else {
-                       dataLogsContainer.innerHTML = '<p class="text-red-500">錯誤：總幹事帳號未設定所屬社區。</p>';
-                       return;
+                        dataLogsContainer.innerHTML = '<p class="text-red-500">錯誤：總幹事帳號未設定所屬社區。</p>';
+                        return;
                     }
                     break;
                 case ROLES.ADMIN:
                 case ROLES.EXECUTIVE:
-                    schedulesQuery = query(collection(db, "schedules"));
+                    if (communityFilterId) {
+                        scheduleConstraints.push(where("communityId", "==", communityFilterId));
+                    }
                     break;
                 default:
                     dataLogsContainer.innerHTML = '';
                     return;
             }
 
+            const schedulesQuery = query(collection(db, "schedules"), ...scheduleConstraints);
             const schedulesSnapshot = await getDocs(schedulesQuery);
-            const todaysSchedules = [];
+            
+            const relevantSchedules = [];
             schedulesSnapshot.forEach(doc => {
                 const schedule = { id: doc.id, ...doc.data() };
-                if (schedule.weeklyTimes && schedule.weeklyTimes[todayIndex]) {
-                    todaysSchedules.push(schedule);
+                if (schedule.weeklyTimes && schedule.weeklyTimes[selectedDayIndex]) {
+                    relevantSchedules.push(schedule);
                 }
             });
 
-            if (todaysSchedules.length === 0) {
-                dataLogsContainer.innerHTML = '<p class="text-gray-500">今日無相關巡邏排程。</p>';
+            if (relevantSchedules.length === 0) {
+                dataLogsContainer.innerHTML = `<p class="text-gray-500">在 ${selectedDateStr} 無相關巡邏排程。</p>`;
                 return;
             }
             
-            // 2. Get all logs for today
-            const logsQuery = query(collection(db, "patrol_logs"), where("timestamp", ">=", Timestamp.fromDate(startOfDay)), where("timestamp", "<=", Timestamp.fromDate(endOfDay)));
+            // 2. Get all logs for the selected day
+            const logsQuery = query(collection(db, "patrol_logs"), 
+                where("timestamp", ">=", Timestamp.fromDate(startOfDay)), 
+                where("timestamp", "<=", Timestamp.fromDate(endOfDay))
+            );
             const logsSnapshot = await getDocs(logsQuery);
-            const todaysLogs = [];
+            const selectedDayLogs = [];
             logsSnapshot.forEach(doc => {
-                todaysLogs.push({ id: doc.id, ...doc.data() });
+                selectedDayLogs.push({ id: doc.id, ...doc.data() });
             });
 
             // 3. Group logs by scheduleId
-            const logsBySchedule = todaysLogs.reduce((acc, log) => {
+            const logsBySchedule = selectedDayLogs.reduce((acc, log) => {
                 const scheduleId = log.scheduleId;
                 if (!acc[scheduleId]) {
                     acc[scheduleId] = [];
@@ -1270,7 +1332,7 @@
 
             // 4. Render schedule blocks
             dataLogsContainer.innerHTML = '';
-            todaysSchedules.forEach(schedule => {
+            relevantSchedules.forEach(schedule => {
                 const logsForThisSchedule = logsBySchedule[schedule.id] || [];
                 const totalPoints = schedule.patrolPoints?.length || 0;
                 const completedPoints = new Set(logsForThisSchedule.map(l => l.patrolPointId)).size;
@@ -1625,6 +1687,7 @@
         });
 
         // Event listeners for filters
+        document.getElementById('data-apply-filters-btn').addEventListener('click', loadAndRenderDataPage);
         document.getElementById('filter-community').addEventListener('change', listenForSchedules);
         document.getElementById('filter-user').addEventListener('change', listenForSchedules);
         document.getElementById('clear-filters-btn').addEventListener('click', () => {
@@ -1643,6 +1706,8 @@
         });
         document.getElementById('close-map-modal-btn').addEventListener('click', () => closeModal(mapModal));
         document.getElementById('close-map-preview-modal-btn').addEventListener('click', () => closeModal(mapPreviewModal));
+        document.getElementById('close-patrol-map-btn').addEventListener('click', () => closeModal(patrolMapModal));
+        document.getElementById('close-nfc-scan-modal-btn').addEventListener('click', () => closeModal(nfcPointScanModal));
         document.getElementById('print-log-btn').addEventListener('click', () => {
              const printContent = document.getElementById('print-area').cloneNode(true);
              document.getElementById('print-content-wrapper').innerHTML = '';
@@ -1700,24 +1765,21 @@
             }
         }
         
-        function logMessage(message) {
-            if (nfcLog.children.length === 1 && nfcLog.children[0].textContent.includes('掃描紀錄將顯示於此')) {
-                nfcLog.innerHTML = '';
-            }
+        function scanLogMessage(message) {
             const p = document.createElement('p');
             const time = new Date().toLocaleTimeString();
             p.innerHTML = `<span class="font-mono text-gray-400">[${time}]</span> ${message}`;
-            nfcLog.prepend(p);
+            nfcScanLog.prepend(p);
         }
 
         async function startNFCScan(point) {
-            logMessage(`準備掃描巡邏點: ${point.name}...`);
+            scanLogMessage(`準備掃描: ${point.name}...`);
             try {
                 const ndef = new NDEFReader();
                 await ndef.scan();
                 
                 ndef.addEventListener("readingerror", () => {
-                    logMessage("<span class='text-red-500'>讀取 NFC 標籤失敗。</span>");
+                    scanLogMessage("<span class='text-red-500'>讀取 NFC 標籤失敗。</span>");
                 });
 
                 ndef.addEventListener("reading", ({ message, serialNumber }) => {
@@ -1725,7 +1787,7 @@
                 });
 
             } catch (error) {
-                logMessage(`<span class='text-red-500'>掃描錯誤: ${error}</span>`);
+                scanLogMessage(`<span class='text-red-500'>掃描錯誤: ${error}</span>`);
             }
         }
 
@@ -1741,30 +1803,30 @@
             }
 
             if (targetPoint.nfcCode === recordData) {
-                logMessage(`✅ 成功感應！巡邏點: <span class="font-bold">${targetPoint.name}</span>`);
-                logMessage("正在獲取GPS位置...");
+                scanLogMessage(`✅ 成功感應！`);
+                scanLogMessage("正在獲取GPS位置...");
                 getGPSLocation(
                     (coords) => {
-                        logMessage(`GPS位置已獲取: ${coords}`);
+                        scanLogMessage(`GPS位置已獲取`);
                         savePatrolLog(targetPoint, new Date(), coords);
                         closeModal(document.getElementById('nfc-point-scan-modal'));
                         updatePatrolMapMarker(targetPoint.internalId, true);
                     },
                     () => { // Error callback
-                        logMessage("<span class='text-red-500'>無法獲取GPS位置，紀錄將標示為異常。</span>");
+                        scanLogMessage("<span class='text-red-500'>無法獲取GPS位置</span>");
                         savePatrolLog(targetPoint, new Date(), null); // Save without location
                         closeModal(document.getElementById('nfc-point-scan-modal'));
                         updatePatrolMapMarker(targetPoint.internalId, true);
                     }
                 );
             } else {
-                logMessage(`❌ 標籤不符: 請掃描正確的巡邏點 (${targetPoint.name})。`);
+                scanLogMessage(`❌ 標籤不符，請掃描正確的標籤。`);
             }
         }
         
         async function savePatrolLog(patrolPoint, timestamp, scanLocation) {
             if (!currentUser || !activePatrol) {
-                logMessage("<span class='text-red-500'>錯誤：使用者或任務未定義，無法儲存紀錄。</span>");
+                scanLogMessage("<span class='text-red-500'>錯誤：無法儲存紀錄。</span>");
                 return;
             }
             try {
@@ -1782,10 +1844,9 @@
                     scanLocation: scanLocation || null
                 };
                 await addDoc(collection(db, "patrol_logs"), logData);
-                logMessage(`💾 紀錄已儲存至雲端`);
             } catch (error) {
                 console.error("寫入 Firestore 失敗: ", error);
-                logMessage("<span class='text-red-500'>儲存紀錄至雲端失敗！</span>");
+                scanLogMessage("<span class='text-red-500'>儲存紀錄至雲端失敗！</span>");
             }
         }
         
