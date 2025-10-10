@@ -305,6 +305,11 @@
                             <label for="user-name" class="text-left block text-sm font-medium text-gray-700">姓名</label>
                             <input type="text" id="user-name" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
                         </div>
+                        <div id="user-community-container" class="mb-4 hidden">
+                            <label for="user-community" class="text-left block text-sm font-medium text-gray-700">所屬社區</label>
+                            <select id="user-community" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500"></select>
+                            <p class="text-xs text-left text-gray-500 mt-1">為「總幹事」角色指定一個管理的社區。</p>
+                        </div>
                         <div class="mb-4">
                             <label for="user-email" class="text-left block text-sm font-medium text-gray-700">電子郵件 (帳號)</label>
                             <input type="email" id="user-email" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
@@ -771,10 +776,19 @@
                 return; 
             }
 
+            const data = { role, name, email };
+            if (role === ROLES.CHIEF) {
+                const communityId = document.getElementById('user-community').value;
+                if (!communityId) {
+                    alert('請為總幹事選擇一個所屬社區。');
+                    return;
+                }
+                data.communityId = communityId;
+            }
+
             if (editingUserId) {
                 // Editing an existing user
                 try {
-                    const data = { role, name };
                     await updateDoc(doc(db, "users", editingUserId), data);
                     closeModal(userModal);
                 } catch (e) {
@@ -799,7 +813,6 @@
                     const user = userCredential.user;
 
                     // 2. Create user profile in our main Firestore with the new user's UID
-                    const data = { role, name, email };
                     await setDoc(doc(db, "users", user.uid), data);
 
                     closeModal(userModal); // Success
@@ -1254,6 +1267,8 @@
                 document.getElementById('user-email').disabled = false;
                 document.getElementById('password-container').classList.remove('hidden');
                 document.getElementById('password-help-text').textContent = '新增帳號時為必填 (至少6個字元)。';
+                populateSelect(document.getElementById('user-community'), await getOptionsForSelect('communities', 'name'), '選擇社區');
+                document.getElementById('user-community-container').classList.add('hidden');
                 openModal(userModal);
             }
             if (e.target.id === 'close-user-modal-btn') closeModal(userModal);
@@ -1271,6 +1286,15 @@
                     document.getElementById('user-email').disabled = true;
                     document.getElementById('password-container').classList.add('hidden');
                     document.getElementById('user-password').value = '';
+                    
+                    const communitySelect = document.getElementById('user-community');
+                    await populateSelect(communitySelect, await getOptionsForSelect('communities', 'name'), '選擇社區');
+                    if (data.role === ROLES.CHIEF) {
+                        document.getElementById('user-community-container').classList.remove('hidden');
+                        communitySelect.value = data.communityId || '';
+                    } else {
+                        document.getElementById('user-community-container').classList.add('hidden');
+                    }
                     openModal(userModal);
                 }
             }
@@ -1301,8 +1325,9 @@
                 document.getElementById('schedule-form').reset();
                  document.querySelectorAll('#weekly-times-container input[type="checkbox"]').forEach((cb, index) => {
                     cb.checked = false;
-                    document.getElementById(`schedule-time-${index}`).disabled = true;
-                    document.getElementById(`schedule-time-${index}`).value = '';
+                    const timeInput = document.getElementById(`schedule-time-${index}`);
+                    timeInput.disabled = true;
+                    timeInput.value = '';
                  });
 
                 
@@ -1355,8 +1380,9 @@
                      
                      document.querySelectorAll('#weekly-times-container input[type="checkbox"]').forEach((cb, index) => {
                         cb.checked = false;
-                        document.getElementById(`schedule-time-${index}`).disabled = true;
-                        document.getElementById(`schedule-time-${index}`).value = '';
+                        const timeInput = document.getElementById(`schedule-time-${index}`);
+                        timeInput.disabled = true;
+                        timeInput.value = '';
                      });
                      
                      if (data.weeklyTimes) {
@@ -1457,13 +1483,21 @@
         });
         document.getElementById('close-map-modal-btn').addEventListener('click', () => closeModal(mapModal));
 
-        // Populate User Role Dropdown
+        // Populate User Role Dropdown and handle visibility of community dropdown
         const userRoleSelect = document.getElementById('user-role');
         Object.values(ROLES).forEach(role => {
             const option = document.createElement('option');
             option.value = role;
             option.textContent = role;
             userRoleSelect.appendChild(option);
+        });
+        userRoleSelect.addEventListener('change', (e) => {
+            const communityContainer = document.getElementById('user-community-container');
+            if (e.target.value === ROLES.CHIEF) {
+                communityContainer.classList.remove('hidden');
+            } else {
+                communityContainer.classList.add('hidden');
+            }
         });
 
         // Generate weekly time inputs in schedule modal
