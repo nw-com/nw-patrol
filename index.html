@@ -129,13 +129,13 @@
                     </div>
 
                     <div id="page-patrol" class="page-content hidden">
-                        <h2 class="text-2xl font-bold mb-4">巡邏打卡</h2>
-                        <div class="text-center p-6 bg-white border-2 border-dashed border-gray-300 rounded-lg">
-                            <p class="text-gray-600 mb-4">請點擊下方按鈕，並將手機靠近 NFC 標籤進行感應。</p>
-                            <button id="scan-nfc-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300 inline-flex items-center space-x-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 7.5A4.49 4.49 0 0 0 9 6a4.5 4.5 0 0 0-5 4.5V12"></path><path d="M11.5 16.5a4.49 4.49 0 0 0 3.5 1.5 4.5 4.5 0 0 0 5-4.5V12"></path><path d="M20 12h-8"></path><path d="m15 7-3 5 3 5"></path></svg>
-                                <span>開始掃描</span>
-                            </button>
+                        <h2 class="text-2xl font-bold mb-4">今日巡邏任務</h2>
+                        <div id="todays-patrols-list" class="space-y-4">
+                           <!-- Today's patrols will be loaded here -->
+                        </div>
+                         <div id="nfc-scan-area" class="hidden mt-6 text-center p-6 bg-white border-2 border-dashed border-gray-300 rounded-lg">
+                            <p id="nfc-scan-area-title" class="font-bold text-lg mb-2"></p>
+                            <p class="text-gray-600 mb-4">請將手機靠近 NFC 標籤進行感應。</p>
                             <div id="nfc-log" class="mt-6 text-left text-sm text-gray-700 bg-gray-50 p-4 rounded-lg h-48 overflow-y-auto">
                                 <p class="text-gray-400">掃描紀錄將顯示於此...</p>
                             </div>
@@ -203,6 +203,7 @@
                                         <tr>
                                             <th scope="col" class="px-4 py-3">社區編號</th>
                                             <th scope="col" class="px-4 py-3">社區名稱</th>
+                                            <th scope="col" class="px-4 py-3">GPS位置</th>
                                             <th scope="col" class="px-4 py-3 text-right">操作</th>
                                         </tr>
                                     </thead>
@@ -253,15 +254,24 @@
             <div class="mt-3">
                 <h3 class="text-lg leading-6 font-medium text-gray-900 text-center" id="community-modal-title">新增社區</h3>
                 <div class="mt-2 px-7 py-3">
-                    <form id="community-form" onsubmit="return false;">
+                    <form id="community-form" onsubmit="return false;" class="space-y-4">
                         <input type="hidden" id="community-id-input">
-                        <div class="mb-4">
+                        <div>
                             <label for="community-code" class="text-left block text-sm font-medium text-gray-700">社區編號</label>
                             <input type="text" id="community-code" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
                         </div>
-                        <div class="mb-4">
+                        <div>
                             <label for="community-name" class="text-left block text-sm font-medium text-gray-700">社區名稱</label>
                             <input type="text" id="community-name" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
+                        </div>
+                        <div>
+                            <label for="community-gps" class="text-left block text-sm font-medium text-gray-700">定位社區GPS</label>
+                             <div class="flex items-center space-x-2 mt-1">
+                                <input type="text" id="community-gps" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" placeholder="點擊右側按鈕獲取">
+                                <button type="button" id="get-community-gps" class="p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -357,12 +367,17 @@
                      <input type="hidden" id="patrol-point-internal-id">
                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <input type="text" id="patrol-point-code" placeholder="巡邏點編號" class="px-3 py-2 border border-gray-300 rounded-md" required>
-                        <input type="text" id="patrol-point-location" placeholder="定位位置" class="px-3 py-2 border border-gray-300 rounded-md" required>
+                         <div class="flex items-center space-x-2">
+                            <input type="text" id="patrol-point-location" placeholder="定位位置" class="flex-grow px-3 py-2 border border-gray-300 rounded-md" required>
+                            <button type="button" id="get-point-gps" class="p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                            </button>
+                         </div>
                      </div>
                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <input type="text" id="patrol-point-name" placeholder="巡邏點名稱" class="px-3 py-2 border border-gray-300 rounded-md" required>
                          <div class="flex items-center space-x-2">
-                            <input type="text" id="patrol-point-nfc-code" placeholder="NFC Code" class="flex-grow px-3 py-2 border border-gray-300 rounded-md bg-gray-200" readonly>
+                            <input type="text" id="patrol-point-nfc-code" placeholder="NFC Code (16碼)" class="flex-grow px-3 py-2 border border-gray-300 rounded-md bg-gray-200" readonly>
                             <button id="generate-nfc-code-btn" type="button" class="px-3 py-2 bg-blue-500 text-white rounded-md text-sm">產生</button>
                          </div>
                      </div>
@@ -440,7 +455,6 @@
         const welcomeButton = document.getElementById('welcome-button');
         const logoutPopup = document.getElementById('logout-popup');
         const mainFooter = document.getElementById('main-footer');
-        const scanNfcBtn = document.getElementById('scan-nfc-btn');
         const nfcLog = document.getElementById('nfc-log');
         const nfcStatus = document.getElementById('nfc-status');
         const passwordInput = document.getElementById('password');
@@ -461,6 +475,10 @@
         const patrolPointsModal = document.getElementById('patrol-points-modal');
         const schedulesList = document.getElementById('schedules-list');
 
+        // Patrol page elements
+        const todaysPatrolsList = document.getElementById('todays-patrols-list');
+        const nfcScanArea = document.getElementById('nfc-scan-area');
+
 
         let currentUser = null;
         let userRole = null;
@@ -472,6 +490,7 @@
         let editingUserId = null;
         let editingScheduleId = null;
         let currentScheduleForPoints = null; // Holds the full schedule object being edited for points
+        let activePatrol = null; // Holds schedule data for the currently active patrol scan
 
 
         // --- 權限設定 ---
@@ -581,7 +600,7 @@
             if (communitiesUnsubscribe) { communitiesUnsubscribe(); communitiesUnsubscribe = null; }
             if (usersUnsubscribe) { usersUnsubscribe(); usersUnsubscribe = null; }
             if (schedulesUnsubscribe) { schedulesUnsubscribe(); schedulesUnsubscribe = null; }
-
+            nfcScanArea.classList.add('hidden'); // Hide scan area on any navigation
             
             document.getElementById(`page-${pageId}`).classList.remove('hidden');
             
@@ -591,6 +610,8 @@
             } else if (pageId === 'schedule') {
                 populateScheduleFilters();
                 listenForSchedules();
+            } else if (pageId === 'patrol') {
+                renderTodaysPatrols();
             }
             
             document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -617,7 +638,7 @@
         function renderCommunities(communities) {
             communitiesList.innerHTML = '';
             if (communities.length === 0) {
-                communitiesList.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-gray-500">尚無社區資料</td></tr>`;
+                communitiesList.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">尚無社區資料</td></tr>`;
                 return;
             }
             communities.forEach(c => {
@@ -626,6 +647,7 @@
                 row.innerHTML = `
                     <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">${c.code}</td>
                     <td class="px-4 py-3">${c.name}</td>
+                    <td class="px-4 py-3 text-xs">${c.gps || '未設定'}</td>
                     <td class="px-4 py-3 text-right">
                         <button class="edit-community-btn font-medium text-blue-600 hover:underline mr-2" data-id="${c.id}">編輯</button>
                         <button class="delete-community-btn font-medium text-red-600 hover:underline" data-id="${c.id}">刪除</button>
@@ -637,9 +659,10 @@
         async function saveCommunity() {
             const code = document.getElementById('community-code').value;
             const name = document.getElementById('community-name').value;
+            const gps = document.getElementById('community-gps').value;
             if (!code || !name) { alert("請填寫所有欄位"); return; }
             
-            const data = { code, name };
+            const data = { code, name, gps };
             try {
                 if (editingCommunityId) {
                     await updateDoc(doc(db, "communities", editingCommunityId), data);
@@ -841,12 +864,11 @@
 
             try {
                  if (editingScheduleId) {
-                    // When editing, we need to preserve the existing patrol points
                     const existingDoc = await getDoc(doc(db, "schedules", editingScheduleId));
                     data.patrolPoints = existingDoc.data().patrolPoints || [];
                     await setDoc(doc(db, "schedules", editingScheduleId), data);
                 } else {
-                    data.patrolPoints = currentScheduleForPoints ? currentScheduleForPoints.patrolPoints : []; // Carry over points if copying
+                    data.patrolPoints = currentScheduleForPoints ? currentScheduleForPoints.patrolPoints : []; 
                     await addDoc(collection(db, "schedules"), data);
                 }
                 closeModal(scheduleModal);
@@ -872,7 +894,7 @@
                 row.innerHTML = `
                     <td class="px-4 py-2">${p.code}</td>
                     <td class="px-4 py-2">${p.name}</td>
-                    <td class="px-4 py-2">${p.location}</td>
+                    <td class="px-4 py-2 text-xs">${p.location}</td>
                     <td class="px-4 py-2 font-mono text-xs">${p.nfcCode}</td>
                     <td class="px-4 py-2 text-right">
                         <button class="edit-point-btn font-medium text-blue-600 hover:underline mr-2" data-id="${p.internalId}">編輯</button>
@@ -924,8 +946,57 @@
             }
         }
         
+        // --- 巡邏頁面 ---
+        async function renderTodaysPatrols() {
+            todaysPatrolsList.innerHTML = '<p class="text-gray-500">正在載入今日任務...</p>';
+            if (!currentUser) return;
 
-        // Event Listeners for Page Actions
+            const today = new Date().getDay(); // 0 for Sunday, 1 for Monday...
+            const q = query(collection(db, "schedules"), where("userId", "==", currentUser.uid));
+            const querySnapshot = await getDocs(q);
+            
+            const todaysTasks = [];
+            querySnapshot.forEach(doc => {
+                const schedule = { id: doc.id, ...doc.data() };
+                if (schedule.weeklyTimes && schedule.weeklyTimes[today]) {
+                    todaysTasks.push(schedule);
+                }
+            });
+
+            if (todaysTasks.length === 0) {
+                 todaysPatrolsList.innerHTML = '<p class="text-gray-500">今日無排定巡邏任務。</p>';
+                 return;
+            }
+
+            todaysPatrolsList.innerHTML = '';
+            todaysTasks.forEach(task => {
+                const card = document.createElement('div');
+                card.className = 'p-4 bg-white rounded-lg shadow border border-gray-200';
+                card.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="font-bold text-lg text-gray-800">${task.communityName}</p>
+                            <p class="text-sm text-gray-500">${task.patrolCode}</p>
+                        </div>
+                        <div class="text-right">
+                             <p class="font-semibold text-red-600">${task.weeklyTimes[today]}</p>
+                             <button class="start-patrol-btn mt-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm">開始巡邏</button>
+                        </div>
+                    </div>
+                `;
+                card.querySelector('.start-patrol-btn').addEventListener('click', () => {
+                    activePatrol = task;
+                    document.getElementById('nfc-scan-area-title').textContent = `${task.communityName} - ${task.patrolCode}`;
+                    nfcScanArea.classList.remove('hidden');
+                    nfcLog.innerHTML = '<p class="text-gray-400">掃描紀錄將顯示於此...</p>';
+                    startNFCScan();
+                });
+                todaysPatrolsList.appendChild(card);
+            });
+        }
+        
+
+        // --- Event Listeners for Page Actions ---
         document.addEventListener('click', async (e) => {
             // Community Modals & Actions
             if (e.target.id === 'add-community-btn') {
@@ -945,6 +1016,7 @@
                     document.getElementById('community-modal-title').textContent = '編輯社區';
                     document.getElementById('community-code').value = data.code;
                     document.getElementById('community-name').value = data.name;
+                    document.getElementById('community-gps').value = data.gps || '';
                     openModal(communityModal);
                 }
             }
@@ -995,15 +1067,21 @@
                     const scheduleSnap = await getDoc(doc(db, "schedules", scheduleId));
                     if(scheduleSnap.exists()) sourceData = scheduleSnap.data();
                     editingScheduleId = null; 
-                    currentScheduleForPoints = sourceData; // Carry over patrol points
+                    currentScheduleForPoints = sourceData; 
                     document.getElementById('schedule-modal-title').textContent = '複製排程';
                 } else {
                     editingScheduleId = null;
-                    currentScheduleForPoints = null; // No points for new schedule
+                    currentScheduleForPoints = null; 
                     document.getElementById('schedule-modal-title').textContent = '新增排程';
                 }
                 
                 document.getElementById('schedule-form').reset();
+                 document.querySelectorAll('#weekly-times-container input[type="checkbox"]').forEach((cb, index) => {
+                    cb.checked = false;
+                    document.getElementById(`schedule-time-${index}`).disabled = true;
+                    document.getElementById(`schedule-time-${index}`).value = '';
+                 });
+
                 
                 const [communities, guards] = await Promise.all([
                     getOptionsForSelect('communities', 'name'),
@@ -1052,7 +1130,6 @@
                      document.getElementById('schedule-user').value = data.userId;
                      document.getElementById('schedule-patrol-code').value = data.patrolCode;
                      
-                     // Reset weekly times before populating
                      document.querySelectorAll('#weekly-times-container input[type="checkbox"]').forEach((cb, index) => {
                         cb.checked = false;
                         document.getElementById(`schedule-time-${index}`).disabled = true;
@@ -1093,7 +1170,7 @@
             if(e.target.id === 'close-patrol-points-modal-btn') closeModal(patrolPointsModal);
             if(e.target.id === 'save-patrol-point-btn') savePatrolPoint();
             if(e.target.id === 'generate-nfc-code-btn') {
-                document.getElementById('patrol-point-nfc-code').value = crypto.randomUUID();
+                document.getElementById('patrol-point-nfc-code').value = generateAlphanumericCode(16);
             }
             if (e.target.classList.contains('edit-point-btn')) {
                 const pointId = e.target.dataset.id;
@@ -1123,6 +1200,18 @@
                     currentScheduleForPoints.patrolPoints = updatedPoints;
                     renderPatrolPoints(currentScheduleForPoints);
                 }
+            }
+            
+            // GPS Buttons
+            if (e.target.closest('#get-community-gps')) {
+                getGPSLocation(coords => {
+                    document.getElementById('community-gps').value = coords;
+                });
+            }
+            if (e.target.closest('#get-point-gps')) {
+                 getGPSLocation(coords => {
+                    document.getElementById('patrol-point-location').value = coords;
+                });
             }
 
         });
@@ -1173,10 +1262,6 @@
             } else {
                 nfcStatus.textContent = '不支援';
                 nfcStatus.className = 'text-red-600';
-                scanNfcBtn.disabled = true;
-                scanNfcBtn.textContent = '您的裝置不支援 NFC';
-                scanNfcBtn.classList.remove('bg-red-500', 'hover:bg-red-600');
-                scanNfcBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
             }
         }
         
@@ -1190,7 +1275,7 @@
             nfcLog.prepend(p);
         }
 
-        scanNfcBtn.addEventListener('click', async () => {
+        async function startNFCScan() {
             logMessage("準備掃描... 請靠近 NFC 標籤。");
             try {
                 const ndef = new NDEFReader();
@@ -1200,37 +1285,84 @@
                     logMessage("<span class='text-red-500'>讀取 NFC 標籤失敗。</span>");
                 });
 
-                ndef.addEventListener("reading", ({ serialNumber }) => {
-                    const patrolPointId = serialNumber;
-                    const timestamp = new Date();
-                    logMessage(`✅ 成功感應！標籤 ID: <span class="font-bold">${patrolPointId}</span>`);
-                    savePatrolLog(patrolPointId, timestamp);
+                ndef.addEventListener("reading", ({ message, serialNumber }) => {
+                    let recordData = serialNumber; 
+                    if (message && message.records.length > 0) {
+                        try {
+                           const decoder = new TextDecoder();
+                           recordData = decoder.decode(message.records[0].data);
+                        } catch (e) {
+                           console.warn("Could not decode NDEF message, falling back to serial number.", e);
+                           recordData = serialNumber;
+                        }
+                    }
+                    
+                    const patrolPoint = activePatrol.patrolPoints.find(p => p.nfcCode === recordData);
+
+                    if(patrolPoint) {
+                        logMessage(`✅ 成功感應！巡邏點: <span class="font-bold">${patrolPoint.name}</span>`);
+                        savePatrolLog(patrolPoint, new Date());
+                    } else {
+                         logMessage(`❌ 未知的標籤: ${recordData}`);
+                    }
                 });
 
             } catch (error) {
                 logMessage(`<span class='text-red-500'>掃描錯誤: ${error}</span>`);
             }
-        });
+        }
         
-        async function savePatrolLog(patrolPointId, timestamp) {
-            if (!currentUser) {
-                logMessage("<span class='text-red-500'>錯誤：使用者未登入，無法儲存紀錄。</span>");
+        async function savePatrolLog(patrolPoint, timestamp) {
+            if (!currentUser || !activePatrol) {
+                logMessage("<span class='text-red-500'>錯誤：使用者或任務未定義，無法儲存紀錄。</span>");
                 return;
             }
             try {
                 const logData = {
                     userId: currentUser.uid,
                     userName: currentUserName,
-                    userRole: userRole,
-                    patrolPointId: patrolPointId,
-                    timestamp: timestamp,
-                    communityId: "demo-community-01" // 範例社區 ID，未來應動態取得
+                    scheduleId: activePatrol.id,
+                    communityId: activePatrol.communityId,
+                    communityName: activePatrol.communityName,
+                    patrolPointId: patrolPoint.internalId,
+                    patrolPointName: patrolPoint.name,
+                    patrolPointCode: patrolPoint.code,
+                    nfcCode: patrolPoint.nfcCode,
+                    timestamp: timestamp
                 };
                 await addDoc(collection(db, "patrol_logs"), logData);
                 logMessage(`💾 紀錄已儲存至雲端`);
             } catch (error) {
                 console.error("寫入 Firestore 失敗: ", error);
                 logMessage("<span class='text-red-500'>儲存紀錄至雲端失敗！</span>");
+            }
+        }
+        
+        // --- Helper Functions ---
+        function generateAlphanumericCode(length) {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+        
+        function getGPSLocation(callback) {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude.toFixed(6);
+                        const lon = position.coords.longitude.toFixed(6);
+                        callback(`${lat}, ${lon}`);
+                    },
+                    (error) => {
+                        alert(`無法獲取GPS位置: ${error.message}`);
+                        console.error("GPS Error:", error);
+                    }
+                );
+            } else {
+                alert("您的瀏覽器不支援GPS定位。");
             }
         }
 
