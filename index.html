@@ -460,7 +460,7 @@
     <!-- Firebase SDKs -->
     <script type="module">
         // 匯入 Firebase 模組
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
@@ -771,29 +771,50 @@
                 return; 
             }
 
-            try {
-                if (editingUserId) {
+            if (editingUserId) {
+                // Editing an existing user
+                try {
                     const data = { role, name };
                     await updateDoc(doc(db, "users", editingUserId), data);
-                } else {
-                    if (!password || password.length < 6) {
-                        alert("新增使用者時必須設定密碼 (至少6個字元)。"); 
-                        return; 
-                    }
-                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    closeModal(userModal);
+                } catch (e) {
+                     console.error("更新使用者失敗: ", e);
+                     alert("更新失敗: " + e.message);
+                }
+            } else {
+                // Creating a new user
+                if (!password || password.length < 6) {
+                    alert("新增使用者時必須設定密碼 (至少6個字元)。");
+                    return;
+                }
+
+                // Use a temporary app instance to create the user without logging out the admin
+                const tempAppName = 'userCreationApp_' + Date.now();
+                const tempApp = initializeApp(firebaseConfig, tempAppName);
+                const tempAuth = getAuth(tempApp);
+
+                try {
+                    // 1. Create user in Firebase Auth using the temporary instance
+                    const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
                     const user = userCredential.user;
+
+                    // 2. Create user profile in our main Firestore with the new user's UID
                     const data = { role, name, email };
                     await setDoc(doc(db, "users", user.uid), data);
-                }
-                closeModal(userModal);
-            } catch(e) {
-                console.error("儲存使用者失敗: ", e);
-                if (e.code === 'auth/email-already-in-use') {
-                    alert("此電子郵件已被註冊。");
-                } else if (e.code === 'auth/weak-password') {
-                    alert("密碼太弱，至少需要6個字元。");
-                } else {
-                    alert("操作失敗: " + e.message);
+
+                    closeModal(userModal); // Success
+                } catch (e) {
+                    console.error("創建使用者失敗: ", e);
+                    if (e.code === 'auth/email-already-in-use') {
+                        alert("此電子郵件已被註冊。");
+                    } else if (e.code === 'auth/weak-password') {
+                        alert("密碼太弱，至少需要6個字元。");
+                    } else {
+                        alert("操作失敗: " + e.message);
+                    }
+                } finally {
+                    // 3. Clean up the temporary app instance
+                    await deleteApp(tempApp);
                 }
             }
         }
