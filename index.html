@@ -98,11 +98,15 @@
                              <h1 class="text-md sm:text-xl font-bold text-gray-800 truncate">西北保全巡邏打卡系統</h1>
                         </div>
                     </div>
-                    <div class="flex items-center space-x-2 flex-shrink-0">
-                         <p id="welcome-message" class="text-sm font-semibold text-gray-700 hidden sm:block truncate"></p>
-                        <button id="logout-btn" class="p-2 rounded-full hover:bg-gray-100 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-600"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                        </button>
+                    <div class="relative">
+                         <button id="welcome-button" class="text-sm font-semibold text-gray-700 truncate p-2 rounded-md hover:bg-gray-100"></button>
+                         <div id="logout-popup" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-20 py-1">
+                             <div class="px-4 py-2 text-sm text-gray-700">確定要登出嗎？</div>
+                             <div class="flex justify-around p-2">
+                                 <button id="confirm-logout-btn" class="text-sm bg-red-500 text-white rounded-md px-3 py-1 hover:bg-red-600">登出</button>
+                                 <button id="cancel-logout-btn" class="text-sm bg-gray-200 text-gray-800 rounded-md px-3 py-1 hover:bg-gray-300">取消</button>
+                             </div>
+                         </div>
                     </div>
                 </header>
 
@@ -174,7 +178,7 @@
                                         <th scope="col" class="px-4 py-3">社區名稱</th>
                                         <th scope="col" class="px-4 py-3">巡邏編號</th>
                                         <th scope="col" class="px-4 py-3">巡邏點</th>
-                                        <th scope="col" class="px-4 py-3">開始時間</th>
+                                        <th scope="col" class="px-4 py-3">排程時間</th>
                                         <th scope="col" class="px-4 py-3">人員</th>
                                         <th scope="col" class="px-4 py-3 text-right">操作</th>
                                     </tr>
@@ -307,27 +311,29 @@
     </div>
     
     <div id="schedule-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-        <div class="relative top-10 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="relative top-10 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
             <div class="mt-3">
                 <h3 class="text-lg leading-6 font-medium text-gray-900 text-center" id="schedule-modal-title">新增排程</h3>
-                 <div class="mt-2 px-7 py-3">
-                     <form id="schedule-form" onsubmit="return false;">
+                 <div class="mt-2 px-7 py-3 space-y-4">
+                     <form id="schedule-form" onsubmit="return false;" class="space-y-4">
                          <input type="hidden" id="schedule-id-input">
-                          <div class="mb-4">
+                          <div>
                              <label for="schedule-community" class="text-left block text-sm font-medium text-gray-700">社區名稱</label>
                              <select id="schedule-community" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required></select>
                          </div>
-                         <div class="mb-4">
+                         <div>
                             <label for="schedule-patrol-code" class="text-left block text-sm font-medium text-gray-700">巡邏編號</label>
                             <input type="text" id="schedule-patrol-code" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
                         </div>
-                        <div class="mb-4">
-                            <label for="schedule-datetime" class="text-left block text-sm font-medium text-gray-700">日期時間 (開始時間)</label>
-                            <input type="datetime-local" id="schedule-datetime" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
-                        </div>
-                        <div class="mb-4">
+                        <div>
                             <label for="schedule-user" class="text-left block text-sm font-medium text-gray-700">人員 (保全)</label>
                             <select id="schedule-user" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required></select>
+                        </div>
+                        <div>
+                            <label class="text-left block text-sm font-medium text-gray-700">每日巡邏時間</label>
+                            <div id="weekly-times-container" class="mt-2 space-y-2 p-3 bg-gray-50 rounded-md border">
+                                <!-- Daily time inputs will be generated here -->
+                            </div>
                         </div>
                      </form>
                  </div>
@@ -397,7 +403,7 @@
         // 匯入 Firebase 模組
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase 設定 ---
         const firebaseConfig = {
@@ -431,8 +437,8 @@
         const mainPage = document.getElementById('main-page');
         const loginForm = document.getElementById('login-form');
         const loginError = document.getElementById('login-error');
-        const logoutBtn = document.getElementById('logout-btn');
-        const welcomeMessage = document.getElementById('welcome-message');
+        const welcomeButton = document.getElementById('welcome-button');
+        const logoutPopup = document.getElementById('logout-popup');
         const mainFooter = document.getElementById('main-footer');
         const scanNfcBtn = document.getElementById('scan-nfc-btn');
         const nfcLog = document.getElementById('nfc-log');
@@ -505,7 +511,7 @@
                     userRole = profileData.role;
                     currentUserName = profileData.name || user.email;
                     
-                    welcomeMessage.textContent = `歡迎~${currentUserName}`;
+                    welcomeButton.textContent = `歡迎~${currentUserName}`;
                     loginPage.classList.add('hidden');
                     mainPage.classList.remove('hidden');
                     renderNavigation();
@@ -540,7 +546,19 @@
                 });
         });
 
-        logoutBtn.addEventListener('click', () => { signOut(auth); });
+        welcomeButton.addEventListener('click', () => {
+            logoutPopup.classList.toggle('hidden');
+        });
+
+        document.getElementById('confirm-logout-btn').addEventListener('click', () => {
+             signOut(auth);
+             logoutPopup.classList.add('hidden');
+        });
+        
+        document.getElementById('cancel-logout-btn').addEventListener('click', () => {
+             logoutPopup.classList.add('hidden');
+        });
+
         
         // --- 導航與頁面渲染 ---
         function renderNavigation() {
@@ -693,41 +711,45 @@
         }
 
         // --- 排程頁面 CRUD ---
-        async function populateSelectWithOptions(selectElement, collectionName, valueField, textField) {
-            selectElement.innerHTML = `<option value="">全部</option>`;
+        async function getOptionsForSelect(collectionName, textField) {
             const q = query(collection(db, collectionName));
-            const querySnapshot = await onSnapshot(q, (snapshot) => {
-                 snapshot.forEach(docSnap => {
-                    const data = docSnap.data();
-                    const option = document.createElement('option');
-                    option.value = docSnap.id;
-                    option.dataset.name = data[textField];
-                    option.textContent = data[textField];
-                    selectElement.appendChild(option);
-                });
+            const snapshot = await getDocs(q);
+            const options = [];
+            snapshot.forEach(docSnap => {
+                options.push({ id: docSnap.id, text: docSnap.data()[textField] });
             });
-        }
-        
-         async function populateGuardsSelect(selectElement) {
-            selectElement.innerHTML = `<option value="">全部</option>`;
-            const q = query(collection(db, "users"), where("role", "==", ROLES.GUARD));
-            const querySnapshot = await onSnapshot(q, (snapshot) => {
-                 snapshot.forEach(docSnap => {
-                    const data = docSnap.data();
-                    const option = document.createElement('option');
-                    option.value = docSnap.id;
-                    option.dataset.name = data.name;
-                    option.textContent = data.name;
-                    selectElement.appendChild(option);
-                });
-            });
+            return options;
         }
 
+        async function getGuardsForSelect() {
+            const q = query(collection(db, "users"), where("role", "==", ROLES.GUARD));
+            const snapshot = await getDocs(q);
+            const options = [];
+            snapshot.forEach(docSnap => {
+                options.push({ id: docSnap.id, text: docSnap.data().name });
+            });
+            return options;
+        }
+        
+        function populateSelect(selectElement, options, defaultOptionText = '全部') {
+             selectElement.innerHTML = `<option value="">${defaultOptionText}</option>`;
+             options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.id;
+                option.dataset.name = opt.text;
+                option.textContent = opt.text;
+                selectElement.appendChild(option);
+             });
+        }
+
+
         async function populateScheduleFilters() {
-            const communityFilter = document.getElementById('filter-community');
-            const userFilter = document.getElementById('filter-user');
-            await populateSelectWithOptions(communityFilter, 'communities', 'id', 'name');
-            await populateGuardsSelect(userFilter);
+            const [communities, guards] = await Promise.all([
+                getOptionsForSelect('communities', 'name'),
+                getGuardsForSelect()
+            ]);
+            populateSelect(document.getElementById('filter-community'), communities);
+            populateSelect(document.getElementById('filter-user'), guards);
         }
 
         function listenForSchedules() {
@@ -747,6 +769,17 @@
                 renderSchedules(schedules);
             });
         }
+        
+        function formatWeeklyTimes(weeklyTimes) {
+            if (!weeklyTimes || Object.keys(weeklyTimes).length === 0) {
+                return '未設定';
+            }
+            const days = ['日', '一', '二', '三', '四', '五', '六'];
+            return Object.entries(weeklyTimes)
+                .map(([dayIndex, time]) => `週${days[dayIndex]} ${time}`)
+                .join(', ');
+        }
+
 
         function renderSchedules(schedules) {
              schedulesList.innerHTML = '';
@@ -757,7 +790,6 @@
              schedules.forEach(s => {
                 const row = document.createElement('tr');
                 row.className = 'bg-white border-b';
-                const startTime = s.startTime ? new Date(s.startTime).toLocaleString('sv-SE').replace(' ', 'T').slice(0, 16) : 'N/A';
                 const patrolPointsCount = s.patrolPoints ? s.patrolPoints.length : 0;
                 row.innerHTML = `
                     <td class="px-4 py-3 font-medium text-gray-900">${s.communityName}</td>
@@ -765,9 +797,10 @@
                     <td class="px-4 py-3">
                         <button class="manage-points-btn text-blue-600 hover:underline" data-id="${s.id}">${patrolPointsCount} 個</button>
                     </td>
-                    <td class="px-4 py-3">${startTime.replace('T', ' ')}</td>
+                    <td class="px-4 py-3 text-xs">${formatWeeklyTimes(s.weeklyTimes)}</td>
                     <td class="px-4 py-3">${s.userName}</td>
                     <td class="px-4 py-3 text-right">
+                        <button class="copy-schedule-btn font-medium text-green-600 hover:underline mr-2" data-id="${s.id}">複製</button>
                         <button class="edit-schedule-btn font-medium text-blue-600 hover:underline mr-2" data-id="${s.id}">編輯</button>
                         <button class="delete-schedule-btn font-medium text-red-600 hover:underline" data-id="${s.id}">刪除</button>
                     </td>
@@ -786,20 +819,34 @@
             const userName = userSelect.options[userSelect.selectedIndex].dataset.name;
 
             const patrolCode = document.getElementById('schedule-patrol-code').value;
-            const startTime = document.getElementById('schedule-datetime').value;
+            
+            const weeklyTimes = {};
+            const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+            days.forEach((day, index) => {
+                const checkbox = document.getElementById(`schedule-day-${index}`);
+                if (checkbox.checked) {
+                    const timeInput = document.getElementById(`schedule-time-${index}`);
+                    if(timeInput.value) {
+                       weeklyTimes[index] = timeInput.value;
+                    }
+                }
+            });
 
-            if (!communityId || !patrolCode || !startTime || !userId) {
-                alert("請填寫所有欄位");
+            if (!communityId || !patrolCode || !userId || Object.keys(weeklyTimes).length === 0) {
+                alert("請填寫社區、巡邏編號、人員並至少設定一個巡邏時間。");
                 return;
             }
 
-            const data = { communityId, communityName, patrolCode, startTime, userId, userName };
+            const data = { communityId, communityName, patrolCode, weeklyTimes, userId, userName };
 
             try {
-                if (editingScheduleId) {
-                    await updateDoc(doc(db, "schedules", editingScheduleId), data);
+                 if (editingScheduleId) {
+                    // When editing, we need to preserve the existing patrol points
+                    const existingDoc = await getDoc(doc(db, "schedules", editingScheduleId));
+                    data.patrolPoints = existingDoc.data().patrolPoints || [];
+                    await setDoc(doc(db, "schedules", editingScheduleId), data);
                 } else {
-                    data.patrolPoints = []; // Initialize with empty points array
+                    data.patrolPoints = currentScheduleForPoints ? currentScheduleForPoints.patrolPoints : []; // Carry over points if copying
                     await addDoc(collection(db, "schedules"), data);
                 }
                 closeModal(scheduleModal);
@@ -878,7 +925,7 @@
         }
         
 
-        // Event Listeners for Settings Page
+        // Event Listeners for Page Actions
         document.addEventListener('click', async (e) => {
             // Community Modals & Actions
             if (e.target.id === 'add-community-btn') {
@@ -927,8 +974,8 @@
                     document.getElementById('user-role').value = data.role;
                     document.getElementById('user-name').value = data.name;
                     document.getElementById('user-email').value = data.email;
-                    document.getElementById('user-email').disabled = true; // Email (帳號) 不應被修改
-                    document.getElementById('user-password').value = ''; // 清空密碼欄
+                    document.getElementById('user-email').disabled = true;
+                    document.getElementById('user-password').value = '';
                     openModal(userModal);
                 }
             }
@@ -939,14 +986,49 @@
             }
             
             // Schedule Modals & Actions
-            if (e.target.id === 'add-schedule-btn') {
-                editingScheduleId = null;
-                document.getElementById('schedule-modal-title').textContent = '新增排程';
+            if (e.target.id === 'add-schedule-btn' || e.target.classList.contains('copy-schedule-btn')) {
+                const isCopy = e.target.classList.contains('copy-schedule-btn');
+                let sourceData = null;
+
+                if (isCopy) {
+                    const scheduleId = e.target.dataset.id;
+                    const scheduleSnap = await getDoc(doc(db, "schedules", scheduleId));
+                    if(scheduleSnap.exists()) sourceData = scheduleSnap.data();
+                    editingScheduleId = null; 
+                    currentScheduleForPoints = sourceData; // Carry over patrol points
+                    document.getElementById('schedule-modal-title').textContent = '複製排程';
+                } else {
+                    editingScheduleId = null;
+                    currentScheduleForPoints = null; // No points for new schedule
+                    document.getElementById('schedule-modal-title').textContent = '新增排程';
+                }
+                
                 document.getElementById('schedule-form').reset();
-                const communitySelect = document.getElementById('schedule-community');
-                const userSelect = document.getElementById('schedule-user');
-                await populateSelectWithOptions(communitySelect, 'communities', 'id', 'name');
-                await populateGuardsSelect(userSelect);
+                
+                const [communities, guards] = await Promise.all([
+                    getOptionsForSelect('communities', 'name'),
+                    getGuardsForSelect()
+                ]);
+                populateSelect(document.getElementById('schedule-community'), communities, '選擇社區');
+                populateSelect(document.getElementById('schedule-user'), guards, '選擇人員');
+
+                if (sourceData) {
+                    document.getElementById('schedule-community').value = sourceData.communityId || '';
+                    document.getElementById('schedule-user').value = sourceData.userId || '';
+                    document.getElementById('schedule-patrol-code').value = `${sourceData.patrolCode}-副本`;
+                    if (sourceData.weeklyTimes) {
+                         Object.entries(sourceData.weeklyTimes).forEach(([dayIndex, time]) => {
+                             const checkbox = document.getElementById(`schedule-day-${dayIndex}`);
+                             const timeInput = document.getElementById(`schedule-time-${dayIndex}`);
+                             if (checkbox && timeInput) {
+                                checkbox.checked = true;
+                                timeInput.value = time;
+                                timeInput.disabled = false;
+                             }
+                         });
+                    }
+                }
+                
                 openModal(scheduleModal);
             }
             if (e.target.id === 'close-schedule-modal-btn') closeModal(scheduleModal);
@@ -958,14 +1040,36 @@
                  if (scheduleSnap.exists()) {
                      const data = scheduleSnap.data();
                      document.getElementById('schedule-modal-title').textContent = '編輯排程';
-                     const communitySelect = document.getElementById('schedule-community');
-                     const userSelect = document.getElementById('schedule-user');
-                     await populateSelectWithOptions(communitySelect, 'communities', 'id', 'name');
-                     await populateGuardsSelect(userSelect);
-                     communitySelect.value = data.communityId;
-                     userSelect.value = data.userId;
+                     
+                     const [communities, guards] = await Promise.all([
+                        getOptionsForSelect('communities', 'name'),
+                        getGuardsForSelect()
+                     ]);
+                     populateSelect(document.getElementById('schedule-community'), communities, '選擇社區');
+                     populateSelect(document.getElementById('schedule-user'), guards, '選擇人員');
+
+                     document.getElementById('schedule-community').value = data.communityId;
+                     document.getElementById('schedule-user').value = data.userId;
                      document.getElementById('schedule-patrol-code').value = data.patrolCode;
-                     document.getElementById('schedule-datetime').value = data.startTime;
+                     
+                     // Reset weekly times before populating
+                     document.querySelectorAll('#weekly-times-container input[type="checkbox"]').forEach((cb, index) => {
+                        cb.checked = false;
+                        document.getElementById(`schedule-time-${index}`).disabled = true;
+                        document.getElementById(`schedule-time-${index}`).value = '';
+                     });
+                     
+                     if (data.weeklyTimes) {
+                         Object.entries(data.weeklyTimes).forEach(([dayIndex, time]) => {
+                             const checkbox = document.getElementById(`schedule-day-${dayIndex}`);
+                             const timeInput = document.getElementById(`schedule-time-${index}`);
+                             if (checkbox && timeInput) {
+                                checkbox.checked = true;
+                                timeInput.value = time;
+                                timeInput.disabled = false;
+                             }
+                         });
+                     }
                      openModal(scheduleModal);
                  }
             }
@@ -1039,6 +1143,25 @@
             option.value = role;
             option.textContent = role;
             userRoleSelect.appendChild(option);
+        });
+
+        // Generate weekly time inputs in schedule modal
+        const weeklyTimesContainer = document.getElementById('weekly-times-container');
+        const daysOfWeek = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+        daysOfWeek.forEach((day, index) => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between';
+            div.innerHTML = `
+                <div class="flex items-center">
+                    <input id="schedule-day-${index}" type="checkbox" class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
+                    <label for="schedule-day-${index}" class="ml-3 block text-sm font-medium text-gray-700">${day}</label>
+                </div>
+                <input type="time" id="schedule-time-${index}" class="w-32 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" disabled>
+            `;
+            weeklyTimesContainer.appendChild(div);
+            div.querySelector(`#schedule-day-${index}`).addEventListener('change', (e) => {
+                div.querySelector(`#schedule-time-${index}`).disabled = !e.target.checked;
+            });
         });
 
 
