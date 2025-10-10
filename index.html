@@ -46,8 +46,8 @@
         .table-container {
             overflow-x: auto;
         }
-        #map-container, #map-preview-container {
-            height: 400px;
+        #map-container, #map-preview-container, #patrol-map-container {
+            height: 100%;
             width: 100%;
         }
 
@@ -195,13 +195,6 @@
                         <h2 class="text-2xl font-bold mb-4">今日巡邏任務</h2>
                         <div id="todays-patrols-list" class="space-y-4">
                            <!-- Today's patrols will be loaded here -->
-                        </div>
-                         <div id="nfc-scan-area" class="hidden mt-6 text-center p-6 bg-white border-2 border-dashed border-gray-300 rounded-lg">
-                            <p id="nfc-scan-area-title" class="font-bold text-lg mb-2"></p>
-                            <p class="text-gray-600 mb-4">請將手機靠近 NFC 標籤進行感應。</p>
-                            <div id="nfc-log" class="mt-6 text-left text-sm text-gray-700 bg-gray-50 p-4 rounded-lg h-48 overflow-y-auto">
-                                <p class="text-gray-400">掃描紀錄將顯示於此...</p>
-                            </div>
                         </div>
                     </div>
 
@@ -773,7 +766,6 @@
             if (communitiesUnsubscribe) { communitiesUnsubscribe(); communitiesUnsubscribe = null; }
             if (usersUnsubscribe) { usersUnsubscribe(); usersUnsubscribe = null; }
             if (schedulesUnsubscribe) { schedulesUnsubscribe(); schedulesUnsubscribe = null; }
-            nfcScanArea.classList.add('hidden'); // Hide scan area on any navigation
             
             document.getElementById(`page-${pageId}`).classList.remove('hidden');
             
@@ -1203,9 +1195,8 @@
                 card.querySelector('.start-patrol-btn').addEventListener('click', () => {
                     activePatrol = task;
                     document.getElementById('nfc-scan-area-title').textContent = `${task.communityName} - ${task.patrolCode}`;
-                    nfcScanArea.classList.remove('hidden');
-                    nfcLog.innerHTML = '<p class="text-gray-400">掃描紀錄將顯示於此...</p>';
-                    startNFCScan();
+                    
+                    initializePatrolMap(task);
                 });
                 todaysPatrolsList.appendChild(card);
             });
@@ -1719,8 +1710,8 @@
             nfcLog.prepend(p);
         }
 
-        async function startNFCScan() {
-            logMessage("準備掃描... 請靠近 NFC 標籤。");
+        async function startNFCScan(point) {
+            logMessage(`準備掃描巡邏點: ${point.name}...`);
             try {
                 const ndef = new NDEFReader();
                 await ndef.scan();
@@ -1730,7 +1721,7 @@
                 });
 
                 ndef.addEventListener("reading", ({ message, serialNumber }) => {
-                    handleScanSuccess(message, serialNumber);
+                    handleScanSuccess(message, serialNumber, point);
                 });
 
             } catch (error) {
@@ -1738,7 +1729,7 @@
             }
         }
 
-        async function handleScanSuccess(message, serialNumber) {
+        async function handleScanSuccess(message, serialNumber, targetPoint) {
             let recordData = serialNumber;
             if (message && message.records.length > 0) {
                 try {
@@ -1749,23 +1740,25 @@
                 }
             }
 
-            const patrolPoint = activePatrol.patrolPoints.find(p => p.nfcCode === recordData);
-
-            if (patrolPoint) {
-                logMessage(`✅ 成功感應！巡邏點: <span class="font-bold">${patrolPoint.name}</span>`);
+            if (targetPoint.nfcCode === recordData) {
+                logMessage(`✅ 成功感應！巡邏點: <span class="font-bold">${targetPoint.name}</span>`);
                 logMessage("正在獲取GPS位置...");
                 getGPSLocation(
                     (coords) => {
                         logMessage(`GPS位置已獲取: ${coords}`);
-                        savePatrolLog(patrolPoint, new Date(), coords);
+                        savePatrolLog(targetPoint, new Date(), coords);
+                        closeModal(document.getElementById('nfc-point-scan-modal'));
+                        updatePatrolMapMarker(targetPoint.internalId, true);
                     },
                     () => { // Error callback
                         logMessage("<span class='text-red-500'>無法獲取GPS位置，紀錄將標示為異常。</span>");
-                        savePatrolLog(patrolPoint, new Date(), null); // Save without location
+                        savePatrolLog(targetPoint, new Date(), null); // Save without location
+                        closeModal(document.getElementById('nfc-point-scan-modal'));
+                        updatePatrolMapMarker(targetPoint.internalId, true);
                     }
                 );
             } else {
-                logMessage(`❌ 未知的標籤: ${recordData}`);
+                logMessage(`❌ 標籤不符: 請掃描正確的巡邏點 (${targetPoint.name})。`);
             }
         }
         
@@ -1776,8 +1769,8 @@
             }
             try {
                 const logData = {
-                    userId: currentUser.uid,
-                    userName: userProfile.name,
+                    userId: activePatrol.userId,
+                    userName: activePatrol.userName,
                     scheduleId: activePatrol.id,
                     communityId: activePatrol.communityId,
                     communityName: activePatrol.communityName,
