@@ -227,7 +227,6 @@
                                             <th scope="col" class="px-4 py-3">角色</th>
                                             <th scope="col" class="px-4 py-3">姓名</th>
                                             <th scope="col" class="px-4 py-3">電子郵件(帳號)</th>
-                                            <th scope="col" class="px-4 py-3">密碼</th>
                                             <th scope="col" class="px-4 py-3 text-right">操作</th>
                                         </tr>
                                     </thead>
@@ -304,11 +303,10 @@
                             <label for="user-email" class="text-left block text-sm font-medium text-gray-700">電子郵件 (帳號)</label>
                             <input type="email" id="user-email" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
                         </div>
-                        <div class="mb-4">
+                        <div id="password-container" class="mb-4">
                             <label for="user-password" class="text-left block text-sm font-medium text-gray-700">密碼</label>
                             <input type="text" id="user-password" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
-                            <p class="text-xs text-left text-gray-500 mt-1">新增時必須填寫。編輯時留空則不變更密碼。</p>
-                            <p class="text-xs text-left text-red-600 font-bold mt-1">警告：直接儲存密碼有安全風險。</p>
+                            <p id="password-help-text" class="text-xs text-left text-gray-500 mt-1">新增帳號時為必填 (至少6個字元)。</p>
                         </div>
                     </form>
                 </div>
@@ -417,7 +415,7 @@
     <script type="module">
         // 匯入 Firebase 模組
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase 設定 ---
@@ -689,7 +687,7 @@
         function renderUsers(users) {
             usersList.innerHTML = '';
             if (users.length === 0) {
-                 usersList.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500">尚無帳號資料</td></tr>`;
+                 usersList.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">尚無帳號資料</td></tr>`;
                  return;
             }
             users.forEach(u => {
@@ -699,7 +697,6 @@
                     <td class="px-4 py-3">${u.role}</td>
                     <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">${u.name}</td>
                     <td class="px-4 py-3">${u.email}</td>
-                    <td class="px-4 py-3 font-mono">${u.password ? '••••••••' : 'N/A'}</td>
                     <td class="px-4 py-3 text-right">
                         <button class="edit-user-btn font-medium text-blue-600 hover:underline mr-2" data-id="${u.id}">編輯</button>
                         <button class="delete-user-btn font-medium text-red-600 hover:underline" data-id="${u.id}">刪除</button>
@@ -713,23 +710,40 @@
             const name = document.getElementById('user-name').value;
             const email = document.getElementById('user-email').value;
             const password = document.getElementById('user-password').value;
-            if (!role || !name || !email) { alert("角色、姓名和電子郵件為必填項"); return; }
-            if (!editingUserId && !password) { alert("新增使用者時必須設定密碼"); return; }
-
-            const data = { role, name, email };
-            if (password) { data.password = password; /* 極度不安全，僅為演示 */ }
+            if (!role || !name || !email) { 
+                alert("角色、姓名和電子郵件為必填項"); 
+                return; 
+            }
 
             try {
                 if (editingUserId) {
+                    // Editing an existing user - only update Firestore data
+                    const data = { role, name, email };
                     await updateDoc(doc(db, "users", editingUserId), data);
                 } else {
-                    // 警告：這只會在 Firestore 中建立資料，不會建立可登入的 Firebase Auth 使用者
-                    await addDoc(collection(db, "users"), data);
+                    // Creating a new user
+                    if (!password || password.length < 6) {
+                        alert("新增使用者時必須設定密碼 (至少6個字元)。"); 
+                        return; 
+                    }
+                    // 1. Create user in Firebase Auth
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+
+                    // 2. Create user profile in Firestore with the UID from Auth
+                    const data = { role, name, email };
+                    await setDoc(doc(db, "users", user.uid), data);
                 }
                 closeModal(userModal);
             } catch(e) {
                 console.error("儲存使用者失敗: ", e);
-                alert("儲存失敗");
+                if (e.code === 'auth/email-already-in-use') {
+                    alert("此電子郵件已被註冊。");
+                } else if (e.code === 'auth/weak-password') {
+                    alert("密碼太弱，至少需要6個字元。");
+                } else {
+                    alert("操作失敗: " + e.message);
+                }
             }
         }
 
@@ -1032,6 +1046,8 @@
                 document.getElementById('user-modal-title').textContent = '新增帳號';
                 document.getElementById('user-form').reset();
                 document.getElementById('user-email').disabled = false;
+                document.getElementById('password-container').classList.remove('hidden');
+                document.getElementById('password-help-text').textContent = '新增帳號時為必填 (至少6個字元)。';
                 openModal(userModal);
             }
             if (e.target.id === 'close-user-modal-btn') closeModal(userModal);
@@ -1047,6 +1063,7 @@
                     document.getElementById('user-name').value = data.name;
                     document.getElementById('user-email').value = data.email;
                     document.getElementById('user-email').disabled = true;
+                    document.getElementById('password-container').classList.add('hidden');
                     document.getElementById('user-password').value = '';
                     openModal(userModal);
                 }
