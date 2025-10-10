@@ -57,7 +57,7 @@
                 size: A4;
                 margin: 1cm;
             }
-            body > * {
+            body > *:not(#print-content-wrapper) {
                 display: none;
             }
             #print-content-wrapper, #print-content-wrapper * {
@@ -65,10 +65,7 @@
                 visibility: visible;
             }
             #print-content-wrapper {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
+                position: static;
             }
             #print-header {
                 display: block !important;
@@ -569,6 +566,9 @@
             </form>
         </div>
     </div>
+
+    <!-- Print container -->
+    <div id="print-content-wrapper" class="hidden"></div>
 
 
     <!-- Firebase SDKs -->
@@ -1079,7 +1079,10 @@
 
             try {
                  if (editingScheduleId) {
-                    await updateDoc(doc(db, "schedules", editingScheduleId), data);
+                    const existingDocSnap = await getDoc(doc(db, "schedules", editingScheduleId));
+                    const existingData = existingDocSnap.data();
+                    data.patrolPoints = existingData.patrolPoints || [];
+                    await setDoc(doc(db, "schedules", editingScheduleId), data);
                 } else {
                     data.patrolPoints = currentScheduleForPoints ? currentScheduleForPoints.patrolPoints : []; 
                     await addDoc(collection(db, "schedules"), data);
@@ -1650,6 +1653,9 @@
         document.getElementById('close-map-modal-btn').addEventListener('click', () => closeModal(mapModal));
         document.getElementById('close-map-preview-modal-btn').addEventListener('click', () => closeModal(mapPreviewModal));
         document.getElementById('print-log-btn').addEventListener('click', () => {
+             const printContent = document.getElementById('print-area').cloneNode(true);
+             document.getElementById('print-content-wrapper').innerHTML = '';
+             document.getElementById('print-content-wrapper').appendChild(printContent);
              document.getElementById('print-date').textContent = `報告生成時間: ${new Date().toLocaleString()}`;
              window.print();
         });
