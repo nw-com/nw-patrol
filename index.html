@@ -1999,6 +1999,102 @@
             mapPreview.fitBounds(bounds, { padding: [50, 50] });
             setTimeout(() => mapPreview.invalidateSize(), 100);
         }
+        
+        async function openManualLogModal(scheduleId, pointId, logId = null) {
+            const form = document.getElementById('manual-log-form');
+            form.reset();
+            
+            // Get schedule and point details
+            const scheduleSnap = await getDoc(doc(db, "schedules", scheduleId));
+            if (!scheduleSnap.exists()) {
+                alert('找不到對應的排程！');
+                return;
+            }
+            const scheduleData = scheduleSnap.data();
+            const pointData = scheduleData.patrolPoints.find(p => p.internalId === pointId);
+            if (!pointData) {
+                alert('找不到對應的巡邏點！');
+                return;
+            }
+
+            form.querySelector('#manual-log-schedule-id').value = scheduleId;
+            form.querySelector('#manual-log-point-id').value = pointId;
+            form.querySelector('#manual-log-point-name').textContent = `${pointData.code} (${pointData.name})`;
+            
+            if (logId) { // Editing existing log
+                document.getElementById('manual-log-modal-title').textContent = '編輯巡邏紀錄';
+                form.querySelector('#manual-log-id').value = logId;
+                
+                const logSnap = await getDoc(doc(db, "patrol_logs", logId));
+                if(logSnap.exists()) {
+                    const logData = logSnap.data();
+                    const logDate = logData.timestamp.toDate();
+                    // Format to yyyy-MM-ddThh:mm
+                    const formattedDate = logDate.getFullYear() + '-' +
+                        ('0' + (logDate.getMonth() + 1)).slice(-2) + '-' +
+                        ('0' + logDate.getDate()).slice(-2) + 'T' +
+                        ('0' + logDate.getHours()).slice(-2) + ':' +
+                        ('0' + logDate.getMinutes()).slice(-2);
+                    form.querySelector('#manual-log-datetime').value = formattedDate;
+                    form.querySelector('#manual-log-location').value = logData.scanLocation || '';
+                }
+            } else { // Adding new log
+                document.getElementById('manual-log-modal-title').textContent = '補登巡邏紀錄';
+                form.querySelector('#manual-log-id').value = '';
+            }
+
+            openModal(manualLogModal);
+        }
+
+        async function saveManualLog() {
+            const form = document.getElementById('manual-log-form');
+            const logId = form.querySelector('#manual-log-id').value;
+            const scheduleId = form.querySelector('#manual-log-schedule-id').value;
+            const pointId = form.querySelector('#manual-log-point-id').value;
+            const datetime = form.querySelector('#manual-log-datetime').value;
+            const location = form.querySelector('#manual-log-location').value;
+
+            if (!datetime || !location) {
+                alert('請填寫所有欄位！');
+                return;
+            }
+
+            const scheduleSnap = await getDoc(doc(db, "schedules", scheduleId));
+            const scheduleData = scheduleSnap.data();
+            const pointData = scheduleData.patrolPoints.find(p => p.internalId === pointId);
+            const userSnap = await getDoc(doc(db, "users", scheduleData.userId));
+            const userData = userSnap.data();
+
+            const logData = {
+                userId: scheduleData.userId,
+                userName: userData.name,
+                scheduleId: scheduleId,
+                communityId: scheduleData.communityId,
+                communityName: scheduleData.communityName,
+                patrolPointId: pointData.internalId,
+                patrolPointName: pointData.name,
+                patrolPointCode: pointData.code,
+                nfcCode: pointData.nfcCode,
+                timestamp: new Date(datetime),
+                scanLocation: location
+            };
+
+            try {
+                if (logId) {
+                    // Update existing log
+                    await setDoc(doc(db, "patrol_logs", logId), logData);
+                } else {
+                    // Add new log
+                    await addDoc(collection(db, "patrol_logs"), logData);
+                }
+                closeModal(manualLogModal);
+                closeModal(logDetailsModal);
+                loadAndRenderDataPage();
+            } catch (e) {
+                console.error("儲存手動紀錄失敗: ", e);
+                alert("儲存失敗！");
+            }
+        }
 
 
         // --- 功能性事件監聽 ---
