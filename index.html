@@ -145,10 +145,44 @@
                         </div>
                     </div>
 
-                    <div id="page-schedule" class="page-content hidden">
-                        <h2 class="text-2xl font-bold mb-4">排程管理</h2>
-                        <div class="mt-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700 rounded-lg">
-                            <p><strong>提示：</strong> 此功能正在開發中。</p>
+                    <div id="page-schedule" class="page-content hidden space-y-6">
+                        <div>
+                             <div class="flex flex-wrap gap-4 justify-between items-center mb-4">
+                                <h2 class="text-2xl font-bold text-gray-800">排程管理</h2>
+                                <button id="add-schedule-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm">新增排程</button>
+                            </div>
+                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div>
+                                    <label for="filter-community" class="block text-sm font-medium text-gray-700">依社區篩選</label>
+                                    <select id="filter-community" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm rounded-md">
+                                    </select>
+                                </div>
+                                <div>
+                                     <label for="filter-user" class="block text-sm font-medium text-gray-700">依人員篩選</label>
+                                    <select id="filter-user" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm rounded-md">
+                                    </select>
+                                </div>
+                                <div class="self-end">
+                                    <button id="clear-filters-btn" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm">清除篩選</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-lg shadow overflow-hidden table-container">
+                             <table class="w-full text-sm text-left text-gray-500">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                    <tr>
+                                        <th scope="col" class="px-4 py-3">社區名稱</th>
+                                        <th scope="col" class="px-4 py-3">巡邏編號</th>
+                                        <th scope="col" class="px-4 py-3">巡邏點</th>
+                                        <th scope="col" class="px-4 py-3">開始時間</th>
+                                        <th scope="col" class="px-4 py-3">人員</th>
+                                        <th scope="col" class="px-4 py-3 text-right">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="schedules-list">
+                                    <!-- Schedule data will be populated by JS -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
@@ -271,6 +305,91 @@
             </div>
         </div>
     </div>
+    
+    <div id="schedule-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-10 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 text-center" id="schedule-modal-title">新增排程</h3>
+                 <div class="mt-2 px-7 py-3">
+                     <form id="schedule-form" onsubmit="return false;">
+                         <input type="hidden" id="schedule-id-input">
+                          <div class="mb-4">
+                             <label for="schedule-community" class="text-left block text-sm font-medium text-gray-700">社區名稱</label>
+                             <select id="schedule-community" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required></select>
+                         </div>
+                         <div class="mb-4">
+                            <label for="schedule-patrol-code" class="text-left block text-sm font-medium text-gray-700">巡邏編號</label>
+                            <input type="text" id="schedule-patrol-code" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
+                        </div>
+                        <div class="mb-4">
+                            <label for="schedule-datetime" class="text-left block text-sm font-medium text-gray-700">日期時間 (開始時間)</label>
+                            <input type="datetime-local" id="schedule-datetime" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
+                        </div>
+                        <div class="mb-4">
+                            <label for="schedule-user" class="text-left block text-sm font-medium text-gray-700">人員 (保全)</label>
+                            <select id="schedule-user" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required></select>
+                        </div>
+                     </form>
+                 </div>
+                 <div class="items-center px-4 py-3 text-center">
+                    <button id="save-schedule-btn" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-300">儲存</button>
+                    <button id="close-schedule-modal-btn" class="ml-2 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="patrol-points-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-5 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                 <h3 class="text-lg leading-6 font-medium text-gray-900" id="patrol-points-modal-title">管理巡邏點</h3>
+                 <p id="patrol-points-schedule-info" class="text-sm text-gray-500 mb-4"></p>
+
+                <!-- Add/Edit Patrol Point Form -->
+                 <form id="patrol-point-form" onsubmit="return false;" class="p-4 border rounded-md bg-gray-50 space-y-4 mb-4">
+                     <h4 class="font-semibold" id="patrol-point-form-title">新增巡邏點</h4>
+                     <input type="hidden" id="patrol-point-internal-id">
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input type="text" id="patrol-point-code" placeholder="巡邏點編號" class="px-3 py-2 border border-gray-300 rounded-md" required>
+                        <input type="text" id="patrol-point-location" placeholder="定位位置" class="px-3 py-2 border border-gray-300 rounded-md" required>
+                     </div>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <input type="text" id="patrol-point-name" placeholder="巡邏點名稱" class="px-3 py-2 border border-gray-300 rounded-md" required>
+                         <div class="flex items-center space-x-2">
+                            <input type="text" id="patrol-point-nfc-code" placeholder="NFC Code" class="flex-grow px-3 py-2 border border-gray-300 rounded-md bg-gray-200" readonly>
+                            <button id="generate-nfc-code-btn" type="button" class="px-3 py-2 bg-blue-500 text-white rounded-md text-sm">產生</button>
+                         </div>
+                     </div>
+                     <div>
+                         <button id="save-patrol-point-btn" type="submit" class="px-4 py-2 bg-red-500 text-white rounded-md">儲存巡邏點</button>
+                         <button id="cancel-edit-point-btn" type="button" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hidden">取消編輯</button>
+                     </div>
+                 </form>
+
+                <!-- List of Patrol Points -->
+                <div class="table-container max-h-64 overflow-y-auto">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-4 py-2">編號</th>
+                                <th class="px-4 py-2">名稱</th>
+                                <th class="px-4 py-2">位置</th>
+                                <th class="px-4 py-2">NFC Code</th>
+                                <th class="px-4 py-2 text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="patrol-points-list">
+                            <!-- Points will be populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                 <div class="items-center px-4 py-3 text-right">
+                    <button id="close-patrol-points-modal-btn" class="px-4 py-2 bg-gray-800 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-700">完成</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
 
     <!-- Firebase SDKs -->
@@ -278,7 +397,7 @@
         // 匯入 Firebase 模組
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase 設定 ---
         const firebaseConfig = {
@@ -331,14 +450,22 @@
         const communityModal = document.getElementById('community-modal');
         const userModal = document.getElementById('user-modal');
 
+        // Schedule page elements
+        const scheduleModal = document.getElementById('schedule-modal');
+        const patrolPointsModal = document.getElementById('patrol-points-modal');
+        const schedulesList = document.getElementById('schedules-list');
+
 
         let currentUser = null;
         let userRole = null;
         let currentUserName = null;
         let communitiesUnsubscribe = null;
         let usersUnsubscribe = null;
+        let schedulesUnsubscribe = null;
         let editingCommunityId = null;
         let editingUserId = null;
+        let editingScheduleId = null;
+        let currentScheduleForPoints = null; // Holds the full schedule object being edited for points
 
 
         // --- 權限設定 ---
@@ -435,12 +562,17 @@
             
             if (communitiesUnsubscribe) { communitiesUnsubscribe(); communitiesUnsubscribe = null; }
             if (usersUnsubscribe) { usersUnsubscribe(); usersUnsubscribe = null; }
+            if (schedulesUnsubscribe) { schedulesUnsubscribe(); schedulesUnsubscribe = null; }
+
             
             document.getElementById(`page-${pageId}`).classList.remove('hidden');
             
             if (pageId === 'settings') {
                 listenForCommunities();
                 listenForUsers();
+            } else if (pageId === 'schedule') {
+                populateScheduleFilters();
+                listenForSchedules();
             }
             
             document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -559,7 +691,193 @@
                 alert("儲存失敗");
             }
         }
+
+        // --- 排程頁面 CRUD ---
+        async function populateSelectWithOptions(selectElement, collectionName, valueField, textField) {
+            selectElement.innerHTML = `<option value="">全部</option>`;
+            const q = query(collection(db, collectionName));
+            const querySnapshot = await onSnapshot(q, (snapshot) => {
+                 snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const option = document.createElement('option');
+                    option.value = docSnap.id;
+                    option.dataset.name = data[textField];
+                    option.textContent = data[textField];
+                    selectElement.appendChild(option);
+                });
+            });
+        }
         
+         async function populateGuardsSelect(selectElement) {
+            selectElement.innerHTML = `<option value="">全部</option>`;
+            const q = query(collection(db, "users"), where("role", "==", ROLES.GUARD));
+            const querySnapshot = await onSnapshot(q, (snapshot) => {
+                 snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const option = document.createElement('option');
+                    option.value = docSnap.id;
+                    option.dataset.name = data.name;
+                    option.textContent = data.name;
+                    selectElement.appendChild(option);
+                });
+            });
+        }
+
+        async function populateScheduleFilters() {
+            const communityFilter = document.getElementById('filter-community');
+            const userFilter = document.getElementById('filter-user');
+            await populateSelectWithOptions(communityFilter, 'communities', 'id', 'name');
+            await populateGuardsSelect(userFilter);
+        }
+
+        function listenForSchedules() {
+            if (schedulesUnsubscribe) schedulesUnsubscribe();
+            
+            const communityFilter = document.getElementById('filter-community').value;
+            const userFilter = document.getElementById('filter-user').value;
+
+            let constraints = [];
+            if (communityFilter) constraints.push(where("communityId", "==", communityFilter));
+            if (userFilter) constraints.push(where("userId", "==", userFilter));
+            
+            const q = query(collection(db, "schedules"), ...constraints);
+            schedulesUnsubscribe = onSnapshot(q, (querySnapshot) => {
+                const schedules = [];
+                querySnapshot.forEach((doc) => schedules.push({ id: doc.id, ...doc.data() }));
+                renderSchedules(schedules);
+            });
+        }
+
+        function renderSchedules(schedules) {
+             schedulesList.innerHTML = '';
+             if(schedules.length === 0) {
+                schedulesList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-gray-500">無符合條件的排程</td></tr>`;
+                return;
+             }
+             schedules.forEach(s => {
+                const row = document.createElement('tr');
+                row.className = 'bg-white border-b';
+                const startTime = s.startTime ? new Date(s.startTime).toLocaleString('sv-SE').replace(' ', 'T').slice(0, 16) : 'N/A';
+                const patrolPointsCount = s.patrolPoints ? s.patrolPoints.length : 0;
+                row.innerHTML = `
+                    <td class="px-4 py-3 font-medium text-gray-900">${s.communityName}</td>
+                    <td class="px-4 py-3">${s.patrolCode}</td>
+                    <td class="px-4 py-3">
+                        <button class="manage-points-btn text-blue-600 hover:underline" data-id="${s.id}">${patrolPointsCount} 個</button>
+                    </td>
+                    <td class="px-4 py-3">${startTime.replace('T', ' ')}</td>
+                    <td class="px-4 py-3">${s.userName}</td>
+                    <td class="px-4 py-3 text-right">
+                        <button class="edit-schedule-btn font-medium text-blue-600 hover:underline mr-2" data-id="${s.id}">編輯</button>
+                        <button class="delete-schedule-btn font-medium text-red-600 hover:underline" data-id="${s.id}">刪除</button>
+                    </td>
+                `;
+                 schedulesList.appendChild(row);
+             });
+        }
+        
+        async function saveSchedule() {
+            const communitySelect = document.getElementById('schedule-community');
+            const communityId = communitySelect.value;
+            const communityName = communitySelect.options[communitySelect.selectedIndex].dataset.name;
+            
+            const userSelect = document.getElementById('schedule-user');
+            const userId = userSelect.value;
+            const userName = userSelect.options[userSelect.selectedIndex].dataset.name;
+
+            const patrolCode = document.getElementById('schedule-patrol-code').value;
+            const startTime = document.getElementById('schedule-datetime').value;
+
+            if (!communityId || !patrolCode || !startTime || !userId) {
+                alert("請填寫所有欄位");
+                return;
+            }
+
+            const data = { communityId, communityName, patrolCode, startTime, userId, userName };
+
+            try {
+                if (editingScheduleId) {
+                    await updateDoc(doc(db, "schedules", editingScheduleId), data);
+                } else {
+                    data.patrolPoints = []; // Initialize with empty points array
+                    await addDoc(collection(db, "schedules"), data);
+                }
+                closeModal(scheduleModal);
+            } catch (e) {
+                console.error("儲存排程失敗: ", e);
+                alert("儲存失敗");
+            }
+        }
+        
+        function renderPatrolPoints(schedule) {
+            const listEl = document.getElementById('patrol-points-list');
+            listEl.innerHTML = '';
+            document.getElementById('patrol-points-modal-title').textContent = `管理巡邏點`;
+            document.getElementById('patrol-points-schedule-info').textContent = `社區: ${schedule.communityName} | 巡邏編號: ${schedule.patrolCode}`;
+            
+            if (!schedule.patrolPoints || schedule.patrolPoints.length === 0) {
+                listEl.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500">尚無巡邏點</td></tr>`;
+                return;
+            }
+            schedule.patrolPoints.forEach(p => {
+                const row = document.createElement('tr');
+                row.className = 'bg-white border-b';
+                row.innerHTML = `
+                    <td class="px-4 py-2">${p.code}</td>
+                    <td class="px-4 py-2">${p.name}</td>
+                    <td class="px-4 py-2">${p.location}</td>
+                    <td class="px-4 py-2 font-mono text-xs">${p.nfcCode}</td>
+                    <td class="px-4 py-2 text-right">
+                        <button class="edit-point-btn font-medium text-blue-600 hover:underline mr-2" data-id="${p.internalId}">編輯</button>
+                        <button class="delete-point-btn font-medium text-red-600 hover:underline" data-id="${p.internalId}">刪除</button>
+                    </td>
+                `;
+                listEl.appendChild(row);
+            });
+        }
+        
+        async function savePatrolPoint() {
+            const form = document.getElementById('patrol-point-form');
+            const internalId = form.querySelector('#patrol-point-internal-id').value;
+            
+            const newPoint = {
+                internalId: internalId || crypto.randomUUID(),
+                code: form.querySelector('#patrol-point-code').value,
+                location: form.querySelector('#patrol-point-location').value,
+                name: form.querySelector('#patrol-point-name').value,
+                nfcCode: form.querySelector('#patrol-point-nfc-code').value,
+            };
+
+            if (!newPoint.code || !newPoint.location || !newPoint.name || !newPoint.nfcCode) {
+                alert('請填寫巡邏點的所有欄位');
+                return;
+            }
+
+            const scheduleRef = doc(db, 'schedules', currentScheduleForPoints.id);
+            let updatedPoints = [...(currentScheduleForPoints.patrolPoints || [])];
+
+            const existingPointIndex = updatedPoints.findIndex(p => p.internalId === newPoint.internalId);
+            if (existingPointIndex > -1) {
+                updatedPoints[existingPointIndex] = newPoint; // Update
+            } else {
+                updatedPoints.push(newPoint); // Add
+            }
+
+            try {
+                await updateDoc(scheduleRef, { patrolPoints: updatedPoints });
+                const updatedScheduleSnap = await getDoc(scheduleRef);
+                currentScheduleForPoints = { id: updatedScheduleSnap.id, ...updatedScheduleSnap.data() };
+                renderPatrolPoints(currentScheduleForPoints);
+                form.reset();
+                document.getElementById('patrol-point-form-title').textContent = '新增巡邏點';
+                document.getElementById('cancel-edit-point-btn').classList.add('hidden');
+            } catch (error) {
+                console.error('儲存巡邏點失敗:', error);
+                alert('儲存巡邏點失敗');
+            }
+        }
+        
+
         // Event Listeners for Settings Page
         document.addEventListener('click', async (e) => {
             // Community Modals & Actions
@@ -619,6 +937,99 @@
                     await deleteDoc(doc(db, "users", e.target.dataset.id));
                 }
             }
+            
+            // Schedule Modals & Actions
+            if (e.target.id === 'add-schedule-btn') {
+                editingScheduleId = null;
+                document.getElementById('schedule-modal-title').textContent = '新增排程';
+                document.getElementById('schedule-form').reset();
+                const communitySelect = document.getElementById('schedule-community');
+                const userSelect = document.getElementById('schedule-user');
+                await populateSelectWithOptions(communitySelect, 'communities', 'id', 'name');
+                await populateGuardsSelect(userSelect);
+                openModal(scheduleModal);
+            }
+            if (e.target.id === 'close-schedule-modal-btn') closeModal(scheduleModal);
+            if (e.target.id === 'save-schedule-btn') saveSchedule();
+            if (e.target.classList.contains('edit-schedule-btn')) {
+                 editingScheduleId = e.target.dataset.id;
+                 const scheduleRef = doc(db, "schedules", editingScheduleId);
+                 const scheduleSnap = await getDoc(scheduleRef);
+                 if (scheduleSnap.exists()) {
+                     const data = scheduleSnap.data();
+                     document.getElementById('schedule-modal-title').textContent = '編輯排程';
+                     const communitySelect = document.getElementById('schedule-community');
+                     const userSelect = document.getElementById('schedule-user');
+                     await populateSelectWithOptions(communitySelect, 'communities', 'id', 'name');
+                     await populateGuardsSelect(userSelect);
+                     communitySelect.value = data.communityId;
+                     userSelect.value = data.userId;
+                     document.getElementById('schedule-patrol-code').value = data.patrolCode;
+                     document.getElementById('schedule-datetime').value = data.startTime;
+                     openModal(scheduleModal);
+                 }
+            }
+            if (e.target.classList.contains('delete-schedule-btn')) {
+                if(confirm('確定要刪除此排程嗎？')) {
+                    await deleteDoc(doc(db, "schedules", e.target.dataset.id));
+                }
+            }
+
+            // Patrol Points Modal
+            if(e.target.classList.contains('manage-points-btn')) {
+                const scheduleId = e.target.dataset.id;
+                const scheduleRef = doc(db, 'schedules', scheduleId);
+                const scheduleSnap = await getDoc(scheduleRef);
+                if (scheduleSnap.exists()) {
+                    currentScheduleForPoints = { id: scheduleSnap.id, ...scheduleSnap.data() };
+                    renderPatrolPoints(currentScheduleForPoints);
+                    openModal(patrolPointsModal);
+                }
+            }
+            if(e.target.id === 'close-patrol-points-modal-btn') closeModal(patrolPointsModal);
+            if(e.target.id === 'save-patrol-point-btn') savePatrolPoint();
+            if(e.target.id === 'generate-nfc-code-btn') {
+                document.getElementById('patrol-point-nfc-code').value = crypto.randomUUID();
+            }
+            if (e.target.classList.contains('edit-point-btn')) {
+                const pointId = e.target.dataset.id;
+                const point = currentScheduleForPoints.patrolPoints.find(p => p.internalId === pointId);
+                if (point) {
+                    const form = document.getElementById('patrol-point-form');
+                    form.querySelector('#patrol-point-internal-id').value = point.internalId;
+                    form.querySelector('#patrol-point-code').value = point.code;
+                    form.querySelector('#patrol-point-location').value = point.location;
+                    form.querySelector('#patrol-point-name').value = point.name;
+                    form.querySelector('#patrol-point-nfc-code').value = point.nfcCode;
+                    document.getElementById('patrol-point-form-title').textContent = '編輯巡邏點';
+                    document.getElementById('cancel-edit-point-btn').classList.remove('hidden');
+                }
+            }
+            if (e.target.id === 'cancel-edit-point-btn') {
+                document.getElementById('patrol-point-form').reset();
+                document.getElementById('patrol-point-form-title').textContent = '新增巡邏點';
+                e.target.classList.add('hidden');
+            }
+            if(e.target.classList.contains('delete-point-btn')) {
+                if(confirm('確定要刪除此巡邏點嗎？')) {
+                    const pointIdToDelete = e.target.dataset.id;
+                    const updatedPoints = currentScheduleForPoints.patrolPoints.filter(p => p.internalId !== pointIdToDelete);
+                    const scheduleRef = doc(db, 'schedules', currentScheduleForPoints.id);
+                    await updateDoc(scheduleRef, { patrolPoints: updatedPoints });
+                    currentScheduleForPoints.patrolPoints = updatedPoints;
+                    renderPatrolPoints(currentScheduleForPoints);
+                }
+            }
+
+        });
+
+        // Event listeners for filters
+        document.getElementById('filter-community').addEventListener('change', listenForSchedules);
+        document.getElementById('filter-user').addEventListener('change', listenForSchedules);
+        document.getElementById('clear-filters-btn').addEventListener('click', () => {
+            document.getElementById('filter-community').value = '';
+            document.getElementById('filter-user').value = '';
+            listenForSchedules();
         });
 
         // Populate User Role Dropdown
