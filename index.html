@@ -60,25 +60,15 @@
             body > * {
                 display: none;
             }
-            #print-area, #print-area * {
+            #print-content-wrapper, #print-content-wrapper * {
                 display: block;
                 visibility: visible;
             }
-            #print-area {
+            #print-content-wrapper {
                 position: absolute;
                 left: 0;
                 top: 0;
                 width: 100%;
-            }
-            #log-details-modal {
-                box-shadow: none;
-                border: none;
-                position: static;
-                width: 100%;
-                max-width: 100%;
-            }
-            #log-details-modal h3, #log-details-modal .items-center {
-                display: none;
             }
             #print-header {
                 display: block !important;
@@ -90,14 +80,17 @@
             table {
                 width: 100%;
                 border-collapse: collapse;
+                font-size: 10pt;
             }
             th, td {
                 border: 1px solid #ddd;
-                padding: 8px;
+                padding: 6px;
                 text-align: left;
             }
             th {
-                background-color: #f2f2f2;
+                background-color: #f2f2f2 !important;
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact;
             }
             tr.bg-green-50 {
                 background-color: #e6ffed !important;
@@ -111,6 +104,10 @@
             }
             .print-hide {
                 display: none !important;
+            }
+             a {
+                text-decoration: none;
+                color: inherit;
             }
         }
     </style>
@@ -1082,9 +1079,7 @@
 
             try {
                  if (editingScheduleId) {
-                    const existingDoc = await getDoc(doc(db, "schedules", editingScheduleId));
-                    data.patrolPoints = existingDoc.data().patrolPoints || [];
-                    await setDoc(doc(db, "schedules", editingScheduleId), data);
+                    await updateDoc(doc(db, "schedules", editingScheduleId), data);
                 } else {
                     data.patrolPoints = currentScheduleForPoints ? currentScheduleForPoints.patrolPoints : []; 
                     await addDoc(collection(db, "schedules"), data);
@@ -1326,6 +1321,8 @@
             allPoints.forEach(point => {
                 const log = logs.find(l => l.patrolPointId === point.internalId);
                 const row = document.createElement('tr');
+                row.dataset.scheduleId = schedule.id;
+                row.dataset.pointId = point.internalId;
                 const isCompleted = !!log;
                 
                 let statusText = '異常';
@@ -1339,7 +1336,7 @@
                         statusColor = 'bg-green-200 text-green-800';
                         rowColor = 'bg-green-50';
                     } else {
-                        statusText = `異常 (距離 ${distance.toFixed(0)}公尺)`;
+                        statusText = `異常 (距離 ${distance.toFixed(0)}m)`;
                     }
                 }
 
@@ -1355,7 +1352,7 @@
                             <button class="delete-log-btn text-red-600 hover:underline text-xs ml-2" data-log-id="${log.id}">刪除</button>
                         `;
                     } else {
-                        actionsHtml = `<button class="add-log-btn text-green-600 hover:underline text-xs" data-schedule-id="${schedule.id}" data-point-id="${point.internalId}">補登</button>`;
+                        actionsHtml = `<button class="add-log-btn text-green-600 hover:underline text-xs">補登</button>`;
                     }
                 }
 
@@ -1364,7 +1361,7 @@
                     <td class="px-4 py-3">${schedule.userName}</td>
                     <td class="px-4 py-3">${point.code} (${point.name})</td>
                     <td class="px-4 py-3 text-xs">${locationButton}</td>
-                    <td class="px-4 py-3">${isCompleted ? log.timestamp.toDate().toLocaleTimeString() : '--'}</td>
+                    <td class="px-4 py-3">${isCompleted ? log.timestamp.toDate().toLocaleString() : '--'}</td>
                     <td class="px-4 py-3">
                         <span class="px-2 py-1 text-xs font-semibold rounded-full ${statusColor}">
                             ${statusText}
