@@ -46,7 +46,7 @@
         .table-container {
             overflow-x: auto;
         }
-        #map-container {
+        #map-container, #map-preview-container {
             height: 400px;
             width: 100%;
         }
@@ -461,6 +461,17 @@
         </div>
     </div>
 
+    <div id="map-preview-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-10 mx-auto p-5 border w-full max-w-xl shadow-lg rounded-md bg-white">
+             <h3 class="text-lg leading-6 font-medium text-gray-900">地圖預覽</h3>
+             <p class="text-sm text-gray-500 mb-4">藍色圖釘為預設巡邏點，紅色為實際感應位置。</p>
+             <div id="map-preview-container" class="rounded-md z-0 h-96 w-full"></div>
+             <div class="items-center px-4 py-3 text-right">
+                <button id="close-map-preview-modal-btn" class="px-4 py-2 bg-gray-800 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-700">關閉</button>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Firebase SDKs -->
     <script type="module">
@@ -534,6 +545,7 @@
         
         // Map elements
         const mapModal = document.getElementById('map-modal');
+        const mapPreviewModal = document.getElementById('map-preview-modal');
 
 
         let currentUser = null;
@@ -550,6 +562,11 @@
         let map = null;
         let marker = null;
         let currentGpsTargetInput = null;
+
+        let mapPreview = null;
+        let pointMarker = null;
+        let scanMarker = null;
+        let locationCircle = null;
 
 
         // --- 權限設定 ---
@@ -1206,20 +1223,35 @@
                 const log = logs.find(l => l.patrolPointId === point.internalId);
                 const row = document.createElement('tr');
                 const isCompleted = !!log;
-
-                row.className = isCompleted ? 'bg-green-50' : 'bg-red-50';
                 
-                const locationLink = point.location ? `<a href="https://www.google.com/maps?q=${point.location}" target="_blank" class="text-blue-600 hover:underline">${point.location}</a>` : 'N/A';
+                let statusText = '異常';
+                let statusColor = 'bg-red-200 text-red-800';
+                let rowColor = 'bg-red-50';
+
+                if (isCompleted) {
+                    const distance = calculateDistance(point.location, log.scanLocation);
+                    if (distance <= 20) {
+                        statusText = '正常';
+                        statusColor = 'bg-green-200 text-green-800';
+                        rowColor = 'bg-green-50';
+                    } else {
+                        statusText = `異常 (距離 ${distance.toFixed(0)}公尺)`;
+                    }
+                }
+
+                row.className = rowColor;
+                
+                const locationButton = `<button class="show-map-preview-btn text-blue-600 hover:underline" data-point-location="${point.location || ''}" data-scan-location="${log?.scanLocation || ''}">${point.location || 'N/A'}</button>`;
                 
                 row.innerHTML = `
                     <td class="px-4 py-3">${schedule.communityName}</td>
                     <td class="px-4 py-3">${schedule.userName}</td>
                     <td class="px-4 py-3">${point.code} (${point.name})</td>
-                    <td class="px-4 py-3 text-xs">${locationLink}</td>
+                    <td class="px-4 py-3 text-xs">${locationButton}</td>
                     <td class="px-4 py-3">${isCompleted ? log.timestamp.toDate().toLocaleTimeString() : '--'}</td>
                     <td class="px-4 py-3">
-                        <span class="px-2 py-1 text-xs font-semibold rounded-full ${isCompleted ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}">
-                            ${isCompleted ? '正常' : '異常'}
+                        <span class="px-2 py-1 text-xs font-semibold rounded-full ${statusColor}">
+                            ${statusText}
                         </span>
                     </td>
                 `;
@@ -1461,6 +1493,11 @@
             if (e.target.id === 'close-log-details-modal-btn') {
                 closeModal(logDetailsModal);
             }
+             if (e.target.classList.contains('show-map-preview-btn')) {
+                const pointLoc = e.target.dataset.pointLocation;
+                const scanLoc = e.target.dataset.scanLocation;
+                showMapPreview(pointLoc, scanLoc);
+            }
 
         });
 
@@ -1482,6 +1519,8 @@
             closeModal(mapModal);
         });
         document.getElementById('close-map-modal-btn').addEventListener('click', () => closeModal(mapModal));
+        document.getElementById('close-map-preview-modal-btn').addEventListener('click', () => closeModal(mapPreviewModal));
+
 
         // Populate User Role Dropdown and handle visibility of community dropdown
         const userRoleSelect = document.getElementById('user-role');
@@ -1552,33 +1591,46 @@
                 });
 
                 ndef.addEventListener("reading", ({ message, serialNumber }) => {
-                    let recordData = serialNumber; 
-                    if (message && message.records.length > 0) {
-                        try {
-                           const decoder = new TextDecoder();
-                           recordData = decoder.decode(message.records[0].data);
-                        } catch (e) {
-                           console.warn("Could not decode NDEF message, falling back to serial number.", e);
-                           recordData = serialNumber;
-                        }
-                    }
-                    
-                    const patrolPoint = activePatrol.patrolPoints.find(p => p.nfcCode === recordData);
-
-                    if(patrolPoint) {
-                        logMessage(`✅ 成功感應！巡邏點: <span class="font-bold">${patrolPoint.name}</span>`);
-                        savePatrolLog(patrolPoint, new Date());
-                    } else {
-                         logMessage(`❌ 未知的標籤: ${recordData}`);
-                    }
+                    handleScanSuccess(message, serialNumber);
                 });
 
             } catch (error) {
                 logMessage(`<span class='text-red-500'>掃描錯誤: ${error}</span>`);
             }
         }
+
+        async function handleScanSuccess(message, serialNumber) {
+            let recordData = serialNumber;
+            if (message && message.records.length > 0) {
+                try {
+                    const decoder = new TextDecoder();
+                    recordData = decoder.decode(message.records[0].data);
+                } catch (e) {
+                    console.warn("Could not decode NDEF message, falling back to serial number.", e);
+                }
+            }
+
+            const patrolPoint = activePatrol.patrolPoints.find(p => p.nfcCode === recordData);
+
+            if (patrolPoint) {
+                logMessage(`✅ 成功感應！巡邏點: <span class="font-bold">${patrolPoint.name}</span>`);
+                logMessage("正在獲取GPS位置...");
+                getGPSLocation(
+                    (coords) => {
+                        logMessage(`GPS位置已獲取: ${coords}`);
+                        savePatrolLog(patrolPoint, new Date(), coords);
+                    },
+                    () => { // Error callback
+                        logMessage("<span class='text-red-500'>無法獲取GPS位置，紀錄將標示為異常。</span>");
+                        savePatrolLog(patrolPoint, new Date(), null); // Save without location
+                    }
+                );
+            } else {
+                logMessage(`❌ 未知的標籤: ${recordData}`);
+            }
+        }
         
-        async function savePatrolLog(patrolPoint, timestamp) {
+        async function savePatrolLog(patrolPoint, timestamp, scanLocation) {
             if (!currentUser || !activePatrol) {
                 logMessage("<span class='text-red-500'>錯誤：使用者或任務未定義，無法儲存紀錄。</span>");
                 return;
@@ -1594,7 +1646,8 @@
                     patrolPointName: patrolPoint.name,
                     patrolPointCode: patrolPoint.code,
                     nfcCode: patrolPoint.nfcCode,
-                    timestamp: timestamp
+                    timestamp: timestamp,
+                    scanLocation: scanLocation || null
                 };
                 await addDoc(collection(db, "patrol_logs"), logData);
                 logMessage(`💾 紀錄已儲存至雲端`);
@@ -1613,7 +1666,55 @@
             }
             return result;
         }
+
+        function calculateDistance(coords1Str, coords2Str) {
+            if (!coords1Str || !coords2Str) return Infinity;
+            
+            try {
+                const [lat1, lon1] = coords1Str.split(',').map(Number);
+                const [lat2, lon2] = coords2Str.split(',').map(Number);
+
+                if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return Infinity;
+
+                const R = 6371e3; // metres
+                const φ1 = lat1 * Math.PI/180;
+                const φ2 = lat2 * Math.PI/180;
+                const Δφ = (lat2-lat1) * Math.PI/180;
+                const Δλ = (lon2-lon1) * Math.PI/180;
+
+                const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                        Math.cos(φ1) * Math.cos(φ2) *
+                        Math.sin(Δλ/2) * Math.sin(Δλ/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+                return R * c; // in metres
+            } catch (e) {
+                console.error("Error calculating distance:", e);
+                return Infinity;
+            }
+        }
         
+        function getGPSLocation(successCallback, errorCallback) {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude.toFixed(6);
+                        const lon = position.coords.longitude.toFixed(6);
+                        if(successCallback) successCallback(`${lat}, ${lon}`);
+                    },
+                    (error) => {
+                        alert(`無法獲取GPS位置: ${error.message}`);
+                        console.error("GPS Error:", error);
+                        if (errorCallback) errorCallback(error);
+                    },
+                    { enableHighAccuracy: true }
+                );
+            } else {
+                alert("您的瀏覽器不支援GPS定位。");
+                if (errorCallback) errorCallback(new Error("Geolocation not supported"));
+            }
+        }
+
         function initializeMapForSelection(targetInputId) {
             currentGpsTargetInput = document.getElementById(targetInputId);
             openModal(mapModal);
@@ -1653,6 +1754,57 @@
                     console.warn("Could not get user's location, using default.");
                  });
             }
+        }
+
+        function showMapPreview(pointLocation, scanLocation) {
+            if (!pointLocation) {
+                alert("未設定巡邏點的GPS位置。");
+                return;
+            }
+
+            openModal(mapPreviewModal);
+
+            const pointCoords = pointLocation.split(',').map(Number);
+            const bounds = L.latLngBounds([pointCoords]);
+
+            if (!mapPreview) {
+                mapPreview = L.map('map-preview-container').setView(pointCoords, 18);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap'
+                }).addTo(mapPreview);
+            } else {
+                if (pointMarker) mapPreview.removeLayer(pointMarker);
+                if (scanMarker) mapPreview.removeLayer(scanMarker);
+                if (locationCircle) mapPreview.removeLayer(locationCircle);
+            }
+
+            pointMarker = L.marker(pointCoords).addTo(mapPreview)
+                .bindPopup('預設巡邏點').openPopup();
+
+            locationCircle = L.circle(pointCoords, {
+                color: 'green',
+                fillColor: '#8f8',
+                fillOpacity: 0.3,
+                radius: 20
+            }).addTo(mapPreview);
+
+            if (scanLocation) {
+                const scanCoords = scanLocation.split(',').map(Number);
+                if (scanCoords.length === 2 && !isNaN(scanCoords[0])) {
+                    scanMarker = L.marker(scanCoords, { 
+                        icon: L.icon({
+                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                        }) 
+                    }).addTo(mapPreview).bindPopup('實際感應位置');
+                    bounds.extend(scanCoords);
+                }
+            }
+            
+            mapPreview.fitBounds(bounds, { padding: [50, 50] });
+            setTimeout(() => mapPreview.invalidateSize(), 100);
         }
 
 
