@@ -820,14 +820,18 @@
                 const dataFilterDate = document.getElementById('data-filter-date');
                 dataFilterDate.value = new Date().toISOString().split('T')[0];
 
-                const dataCommunityFilterContainer = document.getElementById('data-community-filter-container');
-                if ([ROLES.ADMIN, ROLES.EXECUTIVE].includes(userProfile.role)) {
-                    dataCommunityFilterContainer.classList.remove('hidden');
-                    populateSelect(document.getElementById('data-filter-community'), getOptionsForSelect('communities', 'name'), '所有社區');
-                } else {
-                    dataCommunityFilterContainer.classList.add('hidden');
-                }
-                loadAndRenderDataPage();
+                const setupFiltersAndLoad = async () => {
+                    const dataCommunityFilterContainer = document.getElementById('data-community-filter-container');
+                    if ([ROLES.ADMIN, ROLES.EXECUTIVE].includes(userProfile.role)) {
+                        dataCommunityFilterContainer.classList.remove('hidden');
+                        const communities = await getOptionsForSelect('communities', 'name');
+                        populateSelect(document.getElementById('data-filter-community'), communities, '所有社區');
+                    } else {
+                        dataCommunityFilterContainer.classList.add('hidden');
+                    }
+                    loadAndRenderDataPage();
+                };
+                setupFiltersAndLoad();
             }
             
             document.querySelectorAll('.nav-btn').forEach(btn => {
