@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>西北保全巡邏打卡系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <style>
         /* 全局樣式和字體 */
         body {
@@ -43,6 +45,10 @@
         /* 讓表格在小螢幕上可以滾動 */
         .table-container {
             overflow-x: auto;
+        }
+        #map-container {
+            height: 400px;
+            width: 100%;
         }
     </style>
 </head>
@@ -266,8 +272,8 @@
                         <div>
                             <label for="community-gps" class="text-left block text-sm font-medium text-gray-700">定位社區GPS</label>
                              <div class="flex items-center space-x-2 mt-1">
-                                <input type="text" id="community-gps" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" placeholder="點擊右側按鈕獲取">
-                                <button type="button" id="get-community-gps" class="p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
+                                <input type="text" id="community-gps" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" placeholder="點擊右側按鈕在地圖上選點">
+                                <button type="button" class="get-gps-btn p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600" data-target="community-gps">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                                 </button>
                             </div>
@@ -367,7 +373,7 @@
                         <input type="text" id="patrol-point-code" placeholder="巡邏點編號" class="px-3 py-2 border border-gray-300 rounded-md" required>
                          <div class="flex items-center space-x-2">
                             <input type="text" id="patrol-point-location" placeholder="定位位置" class="flex-grow px-3 py-2 border border-gray-300 rounded-md" required>
-                            <button type="button" id="get-point-gps" class="p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
+                            <button type="button" class="get-gps-btn p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600" data-target="patrol-point-location">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                             </button>
                          </div>
@@ -406,6 +412,18 @@
                  <div class="items-center px-4 py-3 text-right">
                     <button id="close-patrol-points-modal-btn" class="px-4 py-2 bg-gray-800 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-700">完成</button>
                 </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="map-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-10 mx-auto p-5 border w-full max-w-xl shadow-lg rounded-md bg-white">
+             <h3 class="text-lg leading-6 font-medium text-gray-900">在地圖上選擇位置</h3>
+             <p class="text-sm text-gray-500 mb-4">拖動圖釘以確定精確位置</p>
+             <div id="map-container" class="rounded-md z-0"></div>
+             <div class="items-center px-4 py-3 text-center">
+                <button id="confirm-map-selection-btn" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-300">確定位置</button>
+                <button id="close-map-modal-btn" class="ml-2 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">取消</button>
             </div>
         </div>
     </div>
@@ -476,6 +494,9 @@
         // Patrol page elements
         const todaysPatrolsList = document.getElementById('todays-patrols-list');
         const nfcScanArea = document.getElementById('nfc-scan-area');
+        
+        // Map elements
+        const mapModal = document.getElementById('map-modal');
 
 
         let currentUser = null;
@@ -489,6 +510,10 @@
         let editingScheduleId = null;
         let currentScheduleForPoints = null; // Holds the full schedule object being edited for points
         let activePatrol = null; // Holds schedule data for the currently active patrol scan
+        
+        let map = null;
+        let marker = null;
+        let currentGpsTargetInput = null;
 
 
         // --- 權限設定 ---
@@ -718,7 +743,7 @@
             try {
                 if (editingUserId) {
                     // Editing an existing user - only update Firestore data
-                    const data = { role, name, email };
+                    const data = { role, name }; // Note: email is not updated
                     await updateDoc(doc(db, "users", editingUserId), data);
                 } else {
                     // Creating a new user
@@ -1156,7 +1181,7 @@
                      if (data.weeklyTimes) {
                          Object.entries(data.weeklyTimes).forEach(([dayIndex, time]) => {
                              const checkbox = document.getElementById(`schedule-day-${dayIndex}`);
-                             const timeInput = document.getElementById(`schedule-time-${index}`);
+                             const timeInput = document.getElementById(`schedule-time-${dayIndex}`);
                              if (checkbox && timeInput) {
                                 checkbox.checked = true;
                                 timeInput.value = time;
@@ -1220,15 +1245,9 @@
             }
             
             // GPS Buttons
-            if (e.target.closest('#get-community-gps')) {
-                getGPSLocation(coords => {
-                    document.getElementById('community-gps').value = coords;
-                });
-            }
-            if (e.target.closest('#get-point-gps')) {
-                 getGPSLocation(coords => {
-                    document.getElementById('patrol-point-location').value = coords;
-                });
+            if (e.target.closest('.get-gps-btn')) {
+                const targetId = e.target.closest('.get-gps-btn').dataset.target;
+                initializeMapForSelection(targetId);
             }
 
         });
@@ -1241,6 +1260,16 @@
             document.getElementById('filter-user').value = '';
             listenForSchedules();
         });
+        
+        // Map Modal Listeners
+        document.getElementById('confirm-map-selection-btn').addEventListener('click', () => {
+            if (currentGpsTargetInput && marker) {
+                const latLng = marker.getLatLng();
+                currentGpsTargetInput.value = `${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)}`;
+            }
+            closeModal(mapModal);
+        });
+        document.getElementById('close-map-modal-btn').addEventListener('click', () => closeModal(mapModal));
 
         // Populate User Role Dropdown
         const userRoleSelect = document.getElementById('user-role');
@@ -1365,23 +1394,47 @@
             return result;
         }
         
-        function getGPSLocation(callback) {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const lat = position.coords.latitude.toFixed(6);
-                        const lon = position.coords.longitude.toFixed(6);
-                        callback(`${lat}, ${lon}`);
-                    },
-                    (error) => {
-                        alert(`無法獲取GPS位置: ${error.message}`);
-                        console.error("GPS Error:", error);
-                    }
-                );
+        function initializeMapForSelection(targetInputId) {
+            currentGpsTargetInput = document.getElementById(targetInputId);
+            openModal(mapModal);
+
+            const initialCoords = currentGpsTargetInput.value.split(',').map(s => parseFloat(s.trim()));
+            let lat = 25.0018; // Default to Zhonghe, New Taipei
+            let lng = 121.4975;
+            let zoom = 15;
+
+            if (initialCoords.length === 2 && !isNaN(initialCoords[0]) && !isNaN(initialCoords[1])) {
+                lat = initialCoords[0];
+                lng = initialCoords[1];
+                zoom = 18;
+            }
+
+            if (!map) {
+                map = L.map('map-container').setView([lat, lng], zoom);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap'
+                }).addTo(map);
+                marker = L.marker([lat, lng], { draggable: true }).addTo(map);
             } else {
-                alert("您的瀏覽器不支援GPS定位。");
+                map.setView([lat, lng], zoom);
+                marker.setLatLng([lat, lng]);
+            }
+
+            setTimeout(() => map.invalidateSize(), 100);
+
+            if (!currentGpsTargetInput.value && navigator.geolocation) {
+                 navigator.geolocation.getCurrentPosition(position => {
+                     const userLat = position.coords.latitude;
+                     const userLng = position.coords.longitude;
+                     map.setView([userLat, userLng], 16);
+                     marker.setLatLng([userLat, userLng]);
+                 }, () => {
+                    console.warn("Could not get user's location, using default.");
+                 });
             }
         }
+
 
         // --- 功能性事件監聽 ---
         togglePasswordBtn.addEventListener('click', () => {
