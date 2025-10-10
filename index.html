@@ -1712,7 +1712,7 @@
              const printContent = document.getElementById('print-area').cloneNode(true);
              document.getElementById('print-content-wrapper').innerHTML = '';
              document.getElementById('print-content-wrapper').appendChild(printContent);
-             document.getElementById('print-date').textContent = `報告生成時間: ${new Date().toLocaleString()}`;
+             printContent.querySelector('#print-date').textContent = `報告生成時間: ${new Date().toLocaleString()}`;
              window.print();
         });
 
