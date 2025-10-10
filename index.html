@@ -2003,100 +2003,95 @@
             mapPreview.fitBounds(bounds, { padding: [50, 50] });
             setTimeout(() => mapPreview.invalidateSize(), 100);
         }
-        
-        async function openManualLogModal(scheduleId, pointId, logId = null) {
-            const form = document.getElementById('manual-log-form');
-            form.reset();
+
+        async function initializePatrolMap(task) {
+            openModal(patrolMapModal);
+            patrolPointMarkers = {}; // Reset markers
+
+            const today = new Date();
+            const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+            const endOfDay = new Date(today.setHours(23, 59, 59, 999));
             
-            // Get schedule and point details
-            const scheduleSnap = await getDoc(doc(db, "schedules", scheduleId));
-            if (!scheduleSnap.exists()) {
-                alert('找不到對應的排程！');
-                return;
+            const logsQuery = query(collection(db, "patrol_logs"),
+                where("scheduleId", "==", task.id),
+                where("timestamp", ">=", Timestamp.fromDate(startOfDay)),
+                where("timestamp", "<=", Timestamp.fromDate(endOfDay))
+            );
+            const logsSnapshot = await getDocs(logsQuery);
+            const completedPointIds = new Set();
+            logsSnapshot.forEach(doc => {
+                completedPointIds.add(doc.data().patrolPointId);
+            });
+
+            const blueIcon = new L.Icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+            });
+
+            const greenIcon = new L.Icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+            });
+
+            if (!patrolMap) {
+                patrolMap = L.map('patrol-map-container');
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap'
+                }).addTo(patrolMap);
+            } else {
+                Object.values(patrolPointMarkers).forEach(marker => patrolMap.removeLayer(marker));
             }
-            const scheduleData = scheduleSnap.data();
-            const pointData = scheduleData.patrolPoints.find(p => p.internalId === pointId);
-            if (!pointData) {
-                alert('找不到對應的巡邏點！');
+            
+            const points = task.patrolPoints || [];
+            if (points.length === 0) {
+                alert('此巡邏任務尚未設定任何巡邏點。');
+                closeModal(patrolMapModal);
                 return;
             }
 
-            form.querySelector('#manual-log-schedule-id').value = scheduleId;
-            form.querySelector('#manual-log-point-id').value = pointId;
-            form.querySelector('#manual-log-point-name').textContent = `${pointData.code} (${pointData.name})`;
-            
-            if (logId) { // Editing existing log
-                document.getElementById('manual-log-modal-title').textContent = '編輯巡邏紀錄';
-                form.querySelector('#manual-log-id').value = logId;
-                
-                const logSnap = await getDoc(doc(db, "patrol_logs", logId));
-                if(logSnap.exists()) {
-                    const logData = logSnap.data();
-                    const logDate = logData.timestamp.toDate();
-                    // Format to yyyy-MM-ddThh:mm
-                    const formattedDate = logDate.getFullYear() + '-' +
-                        ('0' + (logDate.getMonth() + 1)).slice(-2) + '-' +
-                        ('0' + logDate.getDate()).slice(-2) + 'T' +
-                        ('0' + logDate.getHours()).slice(-2) + ':' +
-                        ('0' + logDate.getMinutes()).slice(-2);
-                    form.querySelector('#manual-log-datetime').value = formattedDate;
-                    form.querySelector('#manual-log-location').value = logData.scanLocation || '';
+            const bounds = L.latLngBounds();
+            points.forEach(point => {
+                const coords = point.location.split(',').map(Number);
+                if (coords.length === 2 && !isNaN(coords[0])) {
+                    const isCompleted = completedPointIds.has(point.internalId);
+                    const icon = isCompleted ? greenIcon : blueIcon;
+
+                    const marker = L.marker(coords, { icon: icon }).addTo(patrolMap);
+                    marker.bindPopup(`<b>${point.name}</b><br>${point.code}`);
+                    if (!isCompleted) {
+                        marker.on('click', () => {
+                            document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
+                            nfcScanLog.innerHTML = '';
+                            openModal(nfcPointScanModal);
+                            startNFCScan(point);
+                        });
+                    }
+                    patrolPointMarkers[point.internalId] = marker;
+                    bounds.extend(coords);
                 }
-            } else { // Adding new log
-                document.getElementById('manual-log-modal-title').textContent = '補登巡邏紀錄';
-                form.querySelector('#manual-log-id').value = '';
-            }
+            });
 
-            openModal(manualLogModal);
+            if (bounds.isValid()) {
+                patrolMap.fitBounds(bounds, { padding: [50, 50] });
+            }
+            setTimeout(() => patrolMap.invalidateSize(), 100);
         }
 
-        async function saveManualLog() {
-            const form = document.getElementById('manual-log-form');
-            const logId = form.querySelector('#manual-log-id').value;
-            const scheduleId = form.querySelector('#manual-log-schedule-id').value;
-            const pointId = form.querySelector('#manual-log-point-id').value;
-            const datetime = form.querySelector('#manual-log-datetime').value;
-            const location = form.querySelector('#manual-log-location').value;
-
-            if (!datetime || !location) {
-                alert('請填寫所有欄位！');
-                return;
-            }
-
-            const scheduleSnap = await getDoc(doc(db, "schedules", scheduleId));
-            const scheduleData = scheduleSnap.data();
-            const pointData = scheduleData.patrolPoints.find(p => p.internalId === pointId);
-            const userSnap = await getDoc(doc(db, "users", scheduleData.userId));
-            const userData = userSnap.data();
-
-            const logData = {
-                userId: scheduleData.userId,
-                userName: userData.name,
-                scheduleId: scheduleId,
-                communityId: scheduleData.communityId,
-                communityName: scheduleData.communityName,
-                patrolPointId: pointData.internalId,
-                patrolPointName: pointData.name,
-                patrolPointCode: pointData.code,
-                nfcCode: pointData.nfcCode,
-                timestamp: new Date(datetime),
-                scanLocation: location
-            };
-
-            try {
-                if (logId) {
-                    // Update existing log
-                    await setDoc(doc(db, "patrol_logs", logId), logData);
-                } else {
-                    // Add new log
-                    await addDoc(collection(db, "patrol_logs"), logData);
+        function updatePatrolMapMarker(pointId, isCompleted) {
+            const marker = patrolPointMarkers[pointId];
+            if (marker) {
+                const greenIcon = new L.Icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                });
+                if (isCompleted) {
+                    marker.setIcon(greenIcon);
+                    marker.off('click'); // Disable click after completion
                 }
-                closeModal(manualLogModal);
-                closeModal(logDetailsModal);
-                loadAndRenderDataPage();
-            } catch (e) {
-                console.error("儲存手動紀錄失敗: ", e);
-                alert("儲存失敗！");
             }
         }
 
