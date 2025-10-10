@@ -50,6 +50,69 @@
             height: 400px;
             width: 100%;
         }
+
+        /* 列印樣式 */
+        @media print {
+            @page {
+                size: A4;
+                margin: 1cm;
+            }
+            body > * {
+                display: none;
+            }
+            #print-area, #print-area * {
+                display: block;
+                visibility: visible;
+            }
+            #print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            #log-details-modal {
+                box-shadow: none;
+                border: none;
+                position: static;
+                width: 100%;
+                max-width: 100%;
+            }
+            #log-details-modal h3, #log-details-modal .items-center {
+                display: none;
+            }
+            #print-header {
+                display: block !important;
+                text-align: center;
+                margin-bottom: 2rem;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 1rem;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }
+            th {
+                background-color: #f2f2f2;
+            }
+            tr.bg-green-50 {
+                background-color: #e6ffed !important;
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact;
+            }
+            tr.bg-red-50 {
+                background-color: #ffe5e5 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .print-hide {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -345,7 +408,7 @@
                             <input type="text" id="schedule-patrol-code" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
                         </div>
                         <div>
-                            <label for="schedule-user" class="text-left block text-sm font-medium text-gray-700">人員 (保全)</label>
+                            <label for="schedule-user" class="text-left block text-sm font-medium text-gray-700">人員 (保全/總幹事)</label>
                             <select id="schedule-user" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required></select>
                         </div>
                         <div>
@@ -434,8 +497,12 @@
     </div>
 
     <div id="log-details-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-        <div class="relative top-5 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
+        <div id="print-area" class="relative top-5 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
             <div class="mt-3">
+                 <div id="print-header" class="hidden">
+                    <h1 class="text-2xl font-bold">巡邏紀錄報告</h1>
+                    <p class="text-sm text-gray-600" id="print-date"></p>
+                 </div>
                  <h3 class="text-lg leading-6 font-medium text-gray-900" id="log-details-modal-title">巡邏點紀錄</h3>
                  <div class="mt-4 table-container">
                     <table class="w-full text-sm text-left text-gray-500">
@@ -447,6 +514,7 @@
                                 <th class="px-4 py-2">定位地圖</th>
                                 <th class="px-4 py-2">感應時間</th>
                                 <th class="px-4 py-2">狀態</th>
+                                <th class="px-4 py-2 text-right print-hide" id="log-actions-header">操作</th>
                             </tr>
                         </thead>
                         <tbody id="log-details-list">
@@ -454,7 +522,8 @@
                         </tbody>
                     </table>
                  </div>
-                 <div class="items-center px-4 py-3 text-right">
+                 <div class="items-center px-4 py-3 text-right print-hide">
+                    <button id="print-log-btn" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-blue-600">列印/匯出PDF</button>
                     <button id="close-log-details-modal-btn" class="px-4 py-2 bg-gray-800 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-700">關閉</button>
                 </div>
             </div>
@@ -469,6 +538,38 @@
              <div class="items-center px-4 py-3 text-right">
                 <button id="close-map-preview-modal-btn" class="px-4 py-2 bg-gray-800 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-700">關閉</button>
             </div>
+        </div>
+    </div>
+
+    <div id="manual-log-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-10 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 text-center" id="manual-log-modal-title">手動紀錄</h3>
+            <form id="manual-log-form" onsubmit="return false;" class="mt-4 space-y-4">
+                <input type="hidden" id="manual-log-id">
+                <input type="hidden" id="manual-log-schedule-id">
+                <input type="hidden" id="manual-log-point-id">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">巡邏點</label>
+                    <p id="manual-log-point-name" class="mt-1 text-gray-800 font-semibold"></p>
+                </div>
+                <div>
+                    <label for="manual-log-datetime" class="block text-sm font-medium text-gray-700">感應日期時間</label>
+                    <input type="datetime-local" id="manual-log-datetime" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div>
+                    <label for="manual-log-location" class="block text-sm font-medium text-gray-700">感應位置 (GPS)</label>
+                    <div class="flex items-center space-x-2 mt-1">
+                        <input type="text" id="manual-log-location" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                        <button type="button" class="get-gps-btn p-2 bg-blue-500 text-white rounded-md" data-target="manual-log-location">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                        </button>
+                    </div>
+                </div>
+                 <div class="items-center pt-4 text-center">
+                    <button id="save-manual-log-btn" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md">儲存紀錄</button>
+                    <button id="close-manual-log-modal-btn" class="ml-2 px-4 py-2 bg-gray-200 text-gray-800 rounded-md">取消</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -542,6 +643,7 @@
         // Data page elements
         const dataLogsContainer = document.getElementById('data-logs-container');
         const logDetailsModal = document.getElementById('log-details-modal');
+        const manualLogModal = document.getElementById('manual-log-modal');
         
         // Map elements
         const mapModal = document.getElementById('map-modal');
@@ -860,12 +962,12 @@
             return options;
         }
 
-        async function getGuardsForSelect() {
-            const q = query(collection(db, "users"), where("role", "==", ROLES.GUARD));
+        async function getPatrolStaffForSelect() {
+            const q = query(collection(db, "users"), where("role", "in", [ROLES.GUARD, ROLES.CHIEF]));
             const snapshot = await getDocs(q);
             const options = [];
             snapshot.forEach(docSnap => {
-                options.push({ id: docSnap.id, text: docSnap.data().name });
+                options.push({ id: docSnap.id, text: `${docSnap.data().name} (${docSnap.data().role})` });
             });
             return options;
         }
@@ -883,12 +985,12 @@
 
 
         async function populateScheduleFilters() {
-            const [communities, guards] = await Promise.all([
+            const [communities, staff] = await Promise.all([
                 getOptionsForSelect('communities', 'name'),
-                getGuardsForSelect()
+                getPatrolStaffForSelect()
             ]);
             populateSelect(document.getElementById('filter-community'), communities);
-            populateSelect(document.getElementById('filter-user'), guards);
+            populateSelect(document.getElementById('filter-user'), staff);
         }
 
         function listenForSchedules() {
@@ -1208,13 +1310,15 @@
         function renderLogDetailsModal(schedule, logs) {
             const modalTitle = document.getElementById('log-details-modal-title');
             const detailsList = document.getElementById('log-details-list');
+            const isAdmin = [ROLES.ADMIN, ROLES.EXECUTIVE].includes(userProfile.role);
+            document.getElementById('log-actions-header').style.display = isAdmin ? 'table-cell' : 'none';
             
             modalTitle.textContent = `巡邏紀錄: ${schedule.communityName} - ${schedule.patrolCode}`;
             detailsList.innerHTML = '';
 
             const allPoints = schedule.patrolPoints || [];
             if (allPoints.length === 0) {
-                 detailsList.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">此排程未設定任何巡邏點。</td></tr>';
+                 detailsList.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-500">此排程未設定任何巡邏點。</td></tr>';
                  openModal(logDetailsModal);
                  return;
             }
@@ -1243,6 +1347,18 @@
                 
                 const locationButton = `<button class="show-map-preview-btn text-blue-600 hover:underline" data-point-location="${point.location || ''}" data-scan-location="${log?.scanLocation || ''}">${point.location || 'N/A'}</button>`;
                 
+                let actionsHtml = '';
+                if (isAdmin) {
+                    if (isCompleted) {
+                        actionsHtml = `
+                            <button class="edit-log-btn text-blue-600 hover:underline text-xs" data-log-id="${log.id}">編輯</button>
+                            <button class="delete-log-btn text-red-600 hover:underline text-xs ml-2" data-log-id="${log.id}">刪除</button>
+                        `;
+                    } else {
+                        actionsHtml = `<button class="add-log-btn text-green-600 hover:underline text-xs" data-schedule-id="${schedule.id}" data-point-id="${point.internalId}">補登</button>`;
+                    }
+                }
+
                 row.innerHTML = `
                     <td class="px-4 py-3">${schedule.communityName}</td>
                     <td class="px-4 py-3">${schedule.userName}</td>
@@ -1254,6 +1370,7 @@
                             ${statusText}
                         </span>
                     </td>
+                    <td class="px-4 py-3 text-right print-hide">${actionsHtml}</td>
                 `;
                 detailsList.appendChild(row);
             });
@@ -1363,12 +1480,12 @@
                  });
 
                 
-                const [communities, guards] = await Promise.all([
+                const [communities, staff] = await Promise.all([
                     getOptionsForSelect('communities', 'name'),
-                    getGuardsForSelect()
+                    getPatrolStaffForSelect()
                 ]);
                 populateSelect(document.getElementById('schedule-community'), communities, '選擇社區');
-                populateSelect(document.getElementById('schedule-user'), guards, '選擇人員');
+                populateSelect(document.getElementById('schedule-user'), staff, '選擇人員');
 
                 if (sourceData) {
                     document.getElementById('schedule-community').value = sourceData.communityId || '';
@@ -1399,12 +1516,12 @@
                      const data = scheduleSnap.data();
                      document.getElementById('schedule-modal-title').textContent = '編輯排程';
                      
-                     const [communities, guards] = await Promise.all([
+                     const [communities, staff] = await Promise.all([
                         getOptionsForSelect('communities', 'name'),
-                        getGuardsForSelect()
+                        getPatrolStaffForSelect()
                      ]);
                      populateSelect(document.getElementById('schedule-community'), communities, '選擇社區');
-                     populateSelect(document.getElementById('schedule-user'), guards, '選擇人員');
+                     populateSelect(document.getElementById('schedule-user'), staff, '選擇人員');
 
                      document.getElementById('schedule-community').value = data.communityId;
                      document.getElementById('schedule-user').value = data.userId;
@@ -1489,14 +1606,29 @@
                 initializeMapForSelection(targetId);
             }
 
-            // Log Details Modal
-            if (e.target.id === 'close-log-details-modal-btn') {
-                closeModal(logDetailsModal);
-            }
-             if (e.target.classList.contains('show-map-preview-btn')) {
+            // Log Details Modal & Manual Log Modal
+            if (e.target.id === 'close-log-details-modal-btn') closeModal(logDetailsModal);
+            if (e.target.id === 'close-manual-log-modal-btn') closeModal(manualLogModal);
+            if (e.target.id === 'save-manual-log-btn') await saveManualLog();
+            if (e.target.classList.contains('show-map-preview-btn')) {
                 const pointLoc = e.target.dataset.pointLocation;
                 const scanLoc = e.target.dataset.scanLocation;
                 showMapPreview(pointLoc, scanLoc);
+            }
+            if (e.target.classList.contains('add-log-btn') || e.target.classList.contains('edit-log-btn')) {
+                const isEdit = e.target.classList.contains('edit-log-btn');
+                const scheduleId = e.target.closest('tr').dataset.scheduleId;
+                const pointId = e.target.closest('tr').dataset.pointId;
+                const logId = isEdit ? e.target.dataset.logId : null;
+                await openManualLogModal(scheduleId, pointId, logId);
+            }
+            if (e.target.classList.contains('delete-log-btn')) {
+                const logId = e.target.dataset.logId;
+                if (confirm('確定要刪除這筆紀錄嗎？')) {
+                    await deleteDoc(doc(db, 'patrol_logs', logId));
+                    loadAndRenderDataPage(); // Refresh data page
+                    closeModal(logDetailsModal);
+                }
             }
 
         });
@@ -1520,6 +1652,10 @@
         });
         document.getElementById('close-map-modal-btn').addEventListener('click', () => closeModal(mapModal));
         document.getElementById('close-map-preview-modal-btn').addEventListener('click', () => closeModal(mapPreviewModal));
+        document.getElementById('print-log-btn').addEventListener('click', () => {
+             document.getElementById('print-date').textContent = `報告生成時間: ${new Date().toLocaleString()}`;
+             window.print();
+        });
 
 
         // Populate User Role Dropdown and handle visibility of community dropdown
