@@ -52,7 +52,7 @@
         /* 固定地圖高度，避免高度為 0 導致地圖無法顯示 */
         #map-container { height: 24rem; }
         #map-preview-container { height: 24rem; }
-        #patrol-map-container { height: 24rem; }
+        #patrol-map-container { height: 24rem; position: relative; }
 
         /* 列印樣式 */
         @media print {
@@ -590,9 +590,8 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
         </header>
-        <div id="patrol-map-container" style="height: calc(100vh - 120px);"></div>
-        <div class="fixed bottom-0 left-0 right-0 bg-white border-t px-4 py-2">
-            <div id="patrol-point-buttons" class="flex gap-2 overflow-x-auto"></div>
+        <div id="patrol-map-container" style="height: calc(100vh - 64px); position: relative;">
+            <div id="patrol-point-buttons" class="absolute bottom-0 left-0 right-0 bg-white/95 border-t px-3 py-2 flex gap-2 overflow-x-auto z-50"></div>
         </div>
     </div>
 
@@ -1723,7 +1722,11 @@
         });
         document.getElementById('close-map-modal-btn').addEventListener('click', () => closeModal(mapModal));
         document.getElementById('close-map-preview-modal-btn').addEventListener('click', () => closeModal(mapPreviewModal));
-        document.getElementById('close-patrol-map-btn').addEventListener('click', () => closeModal(patrolMapModal));
+        document.getElementById('close-patrol-map-btn').addEventListener('click', () => {
+            const buttonsContainer = document.getElementById('patrol-point-buttons');
+            if (buttonsContainer) buttonsContainer.innerHTML = '';
+            closeModal(patrolMapModal);
+        });
         document.getElementById('close-nfc-scan-modal-btn').addEventListener('click', () => closeModal(nfcPointScanModal));
         document.getElementById('print-log-btn').addEventListener('click', () => {
             const table = document.getElementById('log-details-table');
@@ -1984,7 +1987,9 @@
             currentGpsTargetInput = document.getElementById(targetInputId);
             openModal(mapModal);
 
-            const initialCoords = currentGpsTargetInput.value.split(',').map(s => parseFloat(s.trim()));
+            const raw = currentGpsTargetInput.value || '';
+            const parts = raw.split(/\s*,\s*/);
+            const initialCoords = parts.map(s => parseFloat(s.trim()));
             let lat = 25.0018; // Default to Zhonghe, New Taipei
             let lng = 121.4975;
             let zoom = 15;
@@ -2007,7 +2012,8 @@
                 marker.setLatLng([lat, lng]);
             }
 
-            setTimeout(() => map.invalidateSize(), 100);
+            // 行動裝置上彈窗動畫影響地圖尺寸，延遲刷新避免灰屏
+            setTimeout(() => map.invalidateSize(), 150);
 
             if (!currentGpsTargetInput.value && navigator.geolocation) {
                  navigator.geolocation.getCurrentPosition(position => {
@@ -2206,6 +2212,10 @@
             const buttonsContainer = document.getElementById('patrol-point-buttons');
             if (buttonsContainer) {
                 buttonsContainer.innerHTML = '';
+                // 在窄螢幕中加大底部內距與背景不透明度，提升可見性
+                buttonsContainer.style.padding = '8px';
+                buttonsContainer.style.background = 'rgba(255,255,255,0.95)';
+                buttonsContainer.style.zIndex = '1000';
             }
 
             const today = new Date();
