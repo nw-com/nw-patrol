@@ -590,7 +590,10 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
         </header>
-        <div id="patrol-map-container" style="height: calc(100vh - 64px);"></div>
+        <div id="patrol-map-container" style="height: calc(100vh - 120px);"></div>
+        <div class="fixed bottom-0 left-0 right-0 bg-white border-t px-4 py-2">
+            <div id="patrol-point-buttons" class="flex gap-2 overflow-x-auto"></div>
+        </div>
     </div>
 
     <div id="nfc-point-scan-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center hidden z-50">
@@ -1373,7 +1376,10 @@
             const modalTitle = document.getElementById('log-details-modal-title');
             const detailsList = document.getElementById('log-details-list');
             const isAdmin = [ROLES.ADMIN, ROLES.EXECUTIVE].includes(userProfile.role);
-            document.getElementById('log-actions-header').style.display = isAdmin ? 'table-cell' : 'none';
+            const actionsHeader = document.getElementById('log-actions-header');
+            if (actionsHeader) {
+                actionsHeader.style.display = isAdmin ? 'table-cell' : 'none';
+            }
             
             modalTitle.textContent = `巡邏紀錄: ${schedule.communityName} - ${schedule.patrolCode}`;
             detailsList.innerHTML = '';
@@ -2197,6 +2203,10 @@
         async function initializePatrolMap(task) {
             openModal(patrolMapModal);
             patrolPointMarkers = {}; // Reset markers
+            const buttonsContainer = document.getElementById('patrol-point-buttons');
+            if (buttonsContainer) {
+                buttonsContainer.innerHTML = '';
+            }
 
             const today = new Date();
             const startOfDay = new Date(today.setHours(0, 0, 0, 0));
@@ -2261,6 +2271,18 @@
                     }
                     patrolPointMarkers[point.internalId] = marker;
                     bounds.extend(coords);
+
+                    // 生成巡邏點列表按鈕
+                    if (buttonsContainer) {
+                        const btn = document.createElement('button');
+                        btn.className = `px-2 py-1 text-sm rounded border ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+                        btn.textContent = `${point.code} ${point.name}`;
+                        btn.addEventListener('click', () => {
+                            patrolMap.setView(coords, Math.max(patrolMap.getZoom(), 18));
+                            marker.openPopup();
+                        });
+                        buttonsContainer.appendChild(btn);
+                    }
                 }
             });
 
