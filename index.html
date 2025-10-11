@@ -180,11 +180,11 @@
                 <!-- 頁中 (主要內容) -->
                 <main id="main-content" class="p-4">
                     <!-- 各分頁內容會在這裡切換顯示 -->
-                    <div id="page-home" class="page-content">
-                        <!-- 目前日期時間列（僅首頁顯示，位於頁首下方、頁中上方） -->
-                        <div id="current-time-bar" class="bg-gray-100 text-gray-800 text-sm px-4 py-1 border-b">
-                            <span id="current-time-text"></span>
-                        </div>
+    <div id="page-home" class="page-content">
+        <!-- 目前日期時間列（首頁顯示）：放大置中 -->
+        <div id="current-time-bar" class="bg-gray-100 text-gray-800 px-4 py-3 border-b">
+            <span id="current-time-text" class="block text-center text-2xl font-semibold tracking-wide"></span>
+        </div>
                         <h2 class="text-2xl font-bold mb-4">首頁</h2>
                         <div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-lg">
                             <p class="font-bold">歡迎使用！</p>
@@ -591,7 +591,9 @@
             </button>
         </header>
         <div id="patrol-map-container" style="height: calc(100vh - 64px); position: relative;">
-            <div id="patrol-point-buttons" class="absolute bottom-0 left-0 right-0 bg-white/95 border-t shadow-md px-3 py-2 flex gap-2 overflow-x-auto z-[6000]" style="padding-bottom: env(safe-area-inset-bottom, 0px);"></div>
+            <div id="patrol-point-buttons" class="fixed left-0 right-0 bg-white/95 border-t shadow-md px-3 py-2 flex gap-2 overflow-x-auto z-[6000]"
+                 style="bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px);">
+            </div>
         </div>
     </div>
 
@@ -2218,14 +2220,23 @@
                 buttonsContainer.style.zIndex = '6000';
             }
 
-            const today = new Date();
-            const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-            const endOfDay = new Date(today.setHours(23, 59, 59, 999));
-            
+            // 僅取「當次時段」的巡邏紀錄：以排程時間為中心建立時間窗口
+            const now = new Date();
+            const todayIndex = now.getDay();
+            const scheduledTimeStr = task.weeklyTimes && task.weeklyTimes[todayIndex] ? task.weeklyTimes[todayIndex] : null;
+            let windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+            let windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            if (scheduledTimeStr) {
+                const [hh, mm] = scheduledTimeStr.split(":").map(Number);
+                const scheduled = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh || 0, mm || 0, 0, 0);
+                // 以排程時間為中心 ±120 分鐘窗口（可依需求調整）
+                windowStart = new Date(scheduled.getTime() - 120 * 60 * 1000);
+                windowEnd = new Date(scheduled.getTime() + 120 * 60 * 1000);
+            }
             const logsQuery = query(collection(db, "patrol_logs"),
                 where("scheduleId", "==", task.id),
-                where("timestamp", ">=", Timestamp.fromDate(startOfDay)),
-                where("timestamp", "<=", Timestamp.fromDate(endOfDay))
+                where("timestamp", ">=", Timestamp.fromDate(windowStart)),
+                where("timestamp", "<=", Timestamp.fromDate(windowEnd))
             );
             const logsSnapshot = await getDocs(logsQuery);
             const completedPointIds = new Set();
@@ -2285,8 +2296,9 @@
                     // 生成巡邏點列表按鈕
                     if (buttonsContainer) {
                         const btn = document.createElement('button');
-                        btn.className = `px-2 py-1 text-sm rounded border ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+                        btn.className = `px-3 py-2 text-sm rounded border whitespace-nowrap ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
                         btn.textContent = `${point.code} ${point.name}`;
+                        btn.style.flexShrink = '0';
                         btn.addEventListener('click', () => {
                             patrolMap.setView(coords, Math.max(patrolMap.getZoom(), 18));
                             marker.openPopup();
