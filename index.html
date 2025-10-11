@@ -2054,29 +2054,38 @@
 
             const bounds = L.latLngBounds();
             points.forEach(point => {
-                const coords = point.location.split(',').map(Number);
-                if (coords.length === 2 && !isNaN(coords[0])) {
-                    const isCompleted = completedPointIds.has(point.internalId);
-                    const icon = isCompleted ? greenIcon : blueIcon;
+                if (point.location) {
+                    const coords = point.location.split(',').map(Number);
+                    if (coords.length === 2 && !isNaN(coords[0])) {
+                        const isCompleted = completedPointIds.has(point.internalId);
+                        const icon = isCompleted ? greenIcon : blueIcon;
 
-                    const marker = L.marker(coords, { icon: icon }).addTo(patrolMap);
-                    marker.bindPopup(`<b>${point.name}</b><br>${point.code}`);
-                    if (!isCompleted) {
-                        marker.on('click', () => {
-                            document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
-                            nfcScanLog.innerHTML = '';
-                            openModal(nfcPointScanModal);
-                            startNFCScan(point);
-                        });
+                        const marker = L.marker(coords, { icon: icon }).addTo(patrolMap);
+                        marker.bindPopup(`<b>${point.name}</b><br>${point.code}`);
+                        if (!isCompleted) {
+                            marker.on('click', () => {
+                                document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
+                                nfcScanLog.innerHTML = '';
+                                openModal(nfcPointScanModal);
+                                startNFCScan(point);
+                            });
+                        }
+                        patrolPointMarkers[point.internalId] = marker;
+                        bounds.extend(coords);
                     }
-                    patrolPointMarkers[point.internalId] = marker;
-                    bounds.extend(coords);
                 }
             });
 
             if (bounds.isValid()) {
                 patrolMap.fitBounds(bounds, { padding: [50, 50] });
+            } else if (navigator.geolocation) { // Fallback if no valid points
+                navigator.geolocation.getCurrentPosition(pos => {
+                    patrolMap.setView([pos.coords.latitude, pos.coords.longitude], 15);
+                });
+            } else {
+                patrolMap.setView([25.0018, 121.4975], 15); // Default fallback
             }
+
             setTimeout(() => patrolMap.invalidateSize(), 100);
         }
 
