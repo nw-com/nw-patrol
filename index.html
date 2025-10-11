@@ -1955,6 +1955,117 @@
             }
         }
 
+        // 手動補登／編輯巡邏紀錄
+        async function openManualLogModal(scheduleId, pointId, logId) {
+            try {
+                const scheduleRef = doc(db, 'schedules', scheduleId);
+                const scheduleSnap = await getDoc(scheduleRef);
+                if (!scheduleSnap.exists()) {
+                    alert('找不到排程資料');
+                    return;
+                }
+                const schedule = { id: scheduleSnap.id, ...scheduleSnap.data() };
+                const point = (schedule.patrolPoints || []).find(p => p.internalId === pointId);
+                if (!point) {
+                    alert('找不到巡邏點資料');
+                    return;
+                }
+
+                document.getElementById('manual-log-modal-title').textContent = logId ? '編輯巡邏紀錄' : '補登巡邏紀錄';
+                document.getElementById('manual-log-id').value = logId || '';
+                document.getElementById('manual-log-schedule-id').value = scheduleId;
+                document.getElementById('manual-log-point-id').value = pointId;
+                document.getElementById('manual-log-point-name').textContent = `${point.code}（${point.name}）`;
+
+                const datetimeInput = document.getElementById('manual-log-datetime');
+                const locationInput = document.getElementById('manual-log-location');
+                datetimeInput.value = '';
+                locationInput.value = '';
+
+                if (logId) {
+                    const logRef = doc(db, 'patrol_logs', logId);
+                    const logSnap = await getDoc(logRef);
+                    if (logSnap.exists()) {
+                        const log = logSnap.data();
+                        const ts = log.timestamp && log.timestamp.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
+                        const isoLocal = new Date(ts.getTime() - ts.getTimezoneOffset()*60000).toISOString().slice(0,16);
+                        datetimeInput.value = isoLocal;
+                        locationInput.value = log.scanLocation || '';
+                    }
+                } else {
+                    const now = new Date();
+                    const isoLocal = new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+                    datetimeInput.value = isoLocal;
+                    locationInput.placeholder = point.location || '請點右側GPS鍵或手動輸入 25.0, 121.5';
+                }
+
+                openModal(manualLogModal);
+            } catch (e) {
+                console.error('開啟手動紀錄視窗失敗:', e);
+                alert('開啟手動紀錄視窗失敗');
+            }
+        }
+
+        async function saveManualLog() {
+            const logId = document.getElementById('manual-log-id').value;
+            const scheduleId = document.getElementById('manual-log-schedule-id').value;
+            const pointId = document.getElementById('manual-log-point-id').value;
+            const datetimeStr = document.getElementById('manual-log-datetime').value;
+            const scanLocation = document.getElementById('manual-log-location').value.trim();
+
+            if (!scheduleId || !pointId || !datetimeStr) {
+                alert('請完整填寫必要欄位');
+                return;
+            }
+
+            if (scanLocation && scanLocation.split(',').map(Number).length !== 2) {
+                alert('GPS位置格式需為「緯度, 經度」');
+                return;
+            }
+
+            try {
+                const scheduleRef = doc(db, 'schedules', scheduleId);
+                const scheduleSnap = await getDoc(scheduleRef);
+                if (!scheduleSnap.exists()) {
+                    alert('排程不存在');
+                    return;
+                }
+                const schedule = { id: scheduleSnap.id, ...scheduleSnap.data() };
+                const point = (schedule.patrolPoints || []).find(p => p.internalId === pointId);
+                if (!point) {
+                    alert('巡邏點不存在');
+                    return;
+                }
+
+                const ts = new Date(datetimeStr);
+                const logData = {
+                    userId: schedule.userId,
+                    userName: schedule.userName,
+                    scheduleId: schedule.id,
+                    communityId: schedule.communityId,
+                    communityName: schedule.communityName,
+                    patrolPointId: point.internalId,
+                    patrolPointName: point.name,
+                    patrolPointCode: point.code,
+                    nfcCode: point.nfcCode,
+                    timestamp: Timestamp.fromDate(ts),
+                    scanLocation: scanLocation || null
+                };
+
+                if (logId) {
+                    await updateDoc(doc(db, 'patrol_logs', logId), logData);
+                } else {
+                    await addDoc(collection(db, 'patrol_logs'), logData);
+                }
+
+                closeModal(manualLogModal);
+                await loadAndRenderDataPage();
+            } catch (e) {
+                console.error('儲存手動紀錄失敗:', e);
+                alert('儲存手動紀錄失敗');
+            }
+        }
+
         function showMapPreview(pointLocation, scanLocation) {
             if (!pointLocation) {
                 alert("未設定巡邏點的GPS位置。");
@@ -2077,7 +2188,19 @@
             });
 
             if (bounds.isValid()) {
-                patrolMap.fitBounds(bounds, { padding: [50, 50] });
+                // 先套用邊界，讓所有點可見
+                patrolMap.fitBounds(bounds, { padding: [20, 20], maxZoom: 18 });
+
+                // 依據邊界範圍自動提升縮放，避免點太擠
+                const sw = bounds.getSouthWest();
+                const ne = bounds.getNorthEast();
+                const diagonalMeters = sw.distanceTo(ne);
+                // 小範圍：加大縮放至 18；中範圍：至少 17
+                if (diagonalMeters < 1500) {
+                    patrolMap.setZoom(18);
+                } else if (diagonalMeters < 3000) {
+                    patrolMap.setZoom(Math.max(patrolMap.getZoom(), 17));
+                }
             }
             setTimeout(() => patrolMap.invalidateSize(), 100);
         }
