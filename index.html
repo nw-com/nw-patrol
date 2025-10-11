@@ -47,11 +47,12 @@
             overflow-x: auto;
         }
         #map-container, #map-preview-container, #patrol-map-container {
-            height: 100%;
             width: 100%;
         }
-        /* 固定選點地圖高度，避免高度為 0 導致地圖無法顯示 */
+        /* 固定地圖高度，避免高度為 0 導致地圖無法顯示 */
         #map-container { height: 24rem; }
+        #map-preview-container { height: 24rem; }
+        #patrol-map-container { height: 24rem; }
 
         /* 列印樣式 */
         @media print {
@@ -76,6 +77,7 @@
                 border-bottom: 1px solid #ccc;
                 padding-bottom: 1rem;
             }
+            .print-hide { display: none !important; }
             table {
                 width: 100%;
                 border-collapse: collapse;
@@ -155,10 +157,6 @@
         <!-- 主應用程式頁面 (登入後顯示) -->
         <div id="main-page" class="hidden">
             <div id="main-page-container" class="bg-white">
-                <!-- 目前日期時間列 -->
-                <div id="current-time-bar" class="bg-gray-100 text-gray-800 text-sm px-4 py-1 border-b">
-                    <span id="current-time-text"></span>
-                </div>
                 <!-- 頁首 -->
                 <header id="main-header" class="bg-white border-b border-gray-200 flex items-center justify-between px-4">
                     <div class="flex items-center space-x-2 min-w-0">
@@ -183,6 +181,10 @@
                 <main id="main-content" class="p-4">
                     <!-- 各分頁內容會在這裡切換顯示 -->
                     <div id="page-home" class="page-content">
+                        <!-- 目前日期時間列（僅首頁顯示，位於頁首下方、頁中上方） -->
+                        <div id="current-time-bar" class="bg-gray-100 text-gray-800 text-sm px-4 py-1 border-b">
+                            <span id="current-time-text"></span>
+                        </div>
                         <h2 class="text-2xl font-bold mb-4">首頁</h2>
                         <div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-lg">
                             <p class="font-bold">歡迎使用！</p>
@@ -514,7 +516,7 @@
                  </div>
                  <h3 class="text-lg leading-6 font-medium text-gray-900" id="log-details-modal-title">巡邏點紀錄</h3>
                  <div class="mt-4 table-container">
-                    <table class="w-full text-sm text-left text-gray-500">
+                    <table class="w-full text-sm text-left text-gray-500" id="log-details-table">
                         <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                             <tr>
                                 <th class="px-4 py-2">社區</th>
@@ -523,7 +525,6 @@
                                 <th class="px-4 py-2">定位地圖</th>
                                 <th class="px-4 py-2">感應時間</th>
                                 <th class="px-4 py-2">狀態</th>
-                                <th class="px-4 py-2 text-right print-hide" id="log-actions-header">操作</th>
                             </tr>
                         </thead>
                         <tbody id="log-details-list">
@@ -1719,11 +1720,66 @@
         document.getElementById('close-patrol-map-btn').addEventListener('click', () => closeModal(patrolMapModal));
         document.getElementById('close-nfc-scan-modal-btn').addEventListener('click', () => closeModal(nfcPointScanModal));
         document.getElementById('print-log-btn').addEventListener('click', () => {
-             const printContent = document.getElementById('print-area').cloneNode(true);
-             document.getElementById('print-content-wrapper').innerHTML = '';
-             document.getElementById('print-content-wrapper').appendChild(printContent);
-             printContent.querySelector('#print-date').textContent = `報告生成時間: ${new Date().toLocaleString()}`;
-             window.print();
+            const table = document.getElementById('log-details-table');
+            const tbody = document.getElementById('log-details-list');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            // 建立列印容器
+            const printContent = document.getElementById('print-area').cloneNode(true);
+            const wrapper = document.getElementById('print-content-wrapper');
+            wrapper.innerHTML = '';
+
+            // 重建表格：首列為欄位名稱；其後為資料列
+            const newTable = document.createElement('table');
+            newTable.className = table.className;
+            const thead = document.createElement('thead');
+            thead.className = table.querySelector('thead').className;
+            const headerRow = document.createElement('tr');
+            ['社區', '保全', '巡邏點編號', '定位地圖', '感應時間', '狀態'].forEach(text => {
+                const th = document.createElement('th');
+                th.className = 'px-4 py-2';
+                th.textContent = text;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            const newTbody = document.createElement('tbody');
+
+            rows.forEach(row => {
+                const cells = Array.from(row.querySelectorAll('td'));
+                // 取前6欄（排除操作欄）
+                const dataCells = cells.slice(0, 6).map(td => {
+                    const cell = document.createElement('td');
+                    cell.className = 'px-4 py-3';
+                    // 將定位地圖的按鈕文字改為純座標字串
+                    if (td.querySelector('.show-map-preview-btn')) {
+                        cell.textContent = td.querySelector('.show-map-preview-btn').textContent || td.textContent;
+                    } else {
+                        cell.textContent = td.textContent;
+                    }
+                    return cell;
+                });
+                const newRow = document.createElement('tr');
+                dataCells.forEach(dc => newRow.appendChild(dc));
+                newTbody.appendChild(newRow);
+            });
+
+            newTable.appendChild(thead);
+            newTable.appendChild(newTbody);
+
+            // 替換原本的列表區塊
+            const tableContainer = printContent.querySelector('.table-container');
+            tableContainer.innerHTML = '';
+            tableContainer.appendChild(newTable);
+
+            // 顯示列印標頭與時間
+            printContent.querySelector('#print-header').classList.remove('hidden');
+            printContent.querySelector('#print-date').textContent = `報告生成時間: ${new Date().toLocaleString()}`;
+            // 隱藏按鈕區塊
+            const btnBar = printContent.querySelector('.print-hide');
+            if (btnBar) btnBar.classList.add('hidden');
+
+            wrapper.appendChild(printContent);
+            window.print();
         });
 
 
@@ -2078,11 +2134,12 @@
 
             openModal(mapPreviewModal);
 
-            const pointCoords = pointLocation.split(',').map(Number);
+            // 解析座標字串，支援含空白的格式
+            const pointCoords = pointLocation.split(',').map(s => Number(s.trim()));
             const bounds = L.latLngBounds([pointCoords]);
 
             if (!mapPreview) {
-                mapPreview = L.map('map-preview-container').setView(pointCoords, 18);
+                mapPreview = L.map('map-preview-container', { zoomControl: true }).setView(pointCoords, 18);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
                     attribution: '© OpenStreetMap'
@@ -2108,7 +2165,7 @@
             }).addTo(mapPreview);
 
             if (scanLocation) {
-                const scanCoords = scanLocation.split(',').map(Number);
+                const scanCoords = scanLocation.split(',').map(s => Number(s.trim()));
                 if (scanCoords.length === 2 && !isNaN(scanCoords[0])) {
                     scanMarker = L.marker(scanCoords, { 
                         icon: L.icon({
@@ -2126,6 +2183,16 @@
             setTimeout(() => mapPreview && mapPreview.invalidateSize(), 150);
             setTimeout(() => mapPreview && mapPreview.invalidateSize(), 400);
         }
+
+        // 關閉預覽時清理，避免殘留造成下次顯示異常
+        document.getElementById('close-map-preview-modal-btn').addEventListener('click', () => {
+            if (mapPreview) {
+                if (pointMarker) mapPreview.removeLayer(pointMarker);
+                if (scanMarker) mapPreview.removeLayer(scanMarker);
+                if (locationCircle) mapPreview.removeLayer(locationCircle);
+            }
+            closeModal(mapPreviewModal);
+        });
 
         async function initializePatrolMap(task) {
             openModal(patrolMapModal);
