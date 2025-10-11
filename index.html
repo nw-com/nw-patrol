@@ -50,6 +50,8 @@
             height: 100%;
             width: 100%;
         }
+        /* 固定選點地圖高度，避免高度為 0 導致地圖無法顯示 */
+        #map-container { height: 24rem; }
 
         /* 列印樣式 */
         @media print {
@@ -491,7 +493,7 @@
         <div class="relative top-10 mx-auto p-5 border w-full max-w-xl shadow-lg rounded-md bg-white">
              <h3 class="text-lg leading-6 font-medium text-gray-900">在地圖上選擇位置</h3>
              <p class="text-sm text-gray-500 mb-4">拖動圖釘以確定精確位置</p>
-             <div id="map-container" class="rounded-md z-0"></div>
+             <div id="map-container" class="rounded-md z-0 h-96 w-full"></div>
              <div class="items-center px-4 py-3 text-center">
                 <button id="confirm-map-selection-btn" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-300">確定位置</button>
                 <button id="close-map-modal-btn" class="ml-2 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">取消</button>
@@ -2023,8 +2025,8 @@
                 completedPointIds.add(doc.data().patrolPointId);
             });
 
-            const blueIcon = new L.Icon({
-                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+            const redIcon = new L.Icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
                 shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
                 iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
             });
@@ -2054,38 +2056,29 @@
 
             const bounds = L.latLngBounds();
             points.forEach(point => {
-                if (point.location) {
-                    const coords = point.location.split(',').map(Number);
-                    if (coords.length === 2 && !isNaN(coords[0])) {
-                        const isCompleted = completedPointIds.has(point.internalId);
-                        const icon = isCompleted ? greenIcon : blueIcon;
+                const coords = point.location.split(',').map(Number);
+                if (coords.length === 2 && !isNaN(coords[0])) {
+                    const isCompleted = completedPointIds.has(point.internalId);
+                    const icon = isCompleted ? greenIcon : redIcon;
 
-                        const marker = L.marker(coords, { icon: icon }).addTo(patrolMap);
-                        marker.bindPopup(`<b>${point.name}</b><br>${point.code}`);
-                        if (!isCompleted) {
-                            marker.on('click', () => {
-                                document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
-                                nfcScanLog.innerHTML = '';
-                                openModal(nfcPointScanModal);
-                                startNFCScan(point);
-                            });
-                        }
-                        patrolPointMarkers[point.internalId] = marker;
-                        bounds.extend(coords);
+                    const marker = L.marker(coords, { icon: icon }).addTo(patrolMap);
+                    marker.bindPopup(`<b>${point.name}</b><br>${point.code}`);
+                    if (!isCompleted) {
+                        marker.on('click', () => {
+                            document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
+                            nfcScanLog.innerHTML = '';
+                            openModal(nfcPointScanModal);
+                            startNFCScan(point);
+                        });
                     }
+                    patrolPointMarkers[point.internalId] = marker;
+                    bounds.extend(coords);
                 }
             });
 
             if (bounds.isValid()) {
                 patrolMap.fitBounds(bounds, { padding: [50, 50] });
-            } else if (navigator.geolocation) { // Fallback if no valid points
-                navigator.geolocation.getCurrentPosition(pos => {
-                    patrolMap.setView([pos.coords.latitude, pos.coords.longitude], 15);
-                });
-            } else {
-                patrolMap.setView([25.0018, 121.4975], 15); // Default fallback
             }
-
             setTimeout(() => patrolMap.invalidateSize(), 100);
         }
 
