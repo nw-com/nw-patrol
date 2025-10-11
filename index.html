@@ -52,7 +52,7 @@
         /* 固定地圖高度，避免高度為 0 導致地圖無法顯示 */
         #map-container { height: 24rem; }
         #map-preview-container { height: 24rem; }
-        #patrol-map-container { height: 24rem; position: relative; }
+        #patrol-map-container { height: 24rem; position: relative; padding-bottom: 56px; }
 
         /* 列印樣式 */
         @media print {
@@ -495,7 +495,7 @@
         </div>
     </div>
     
-    <div id="map-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div id="map-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-[5000]">
         <div class="relative top-10 mx-auto p-5 border w-full max-w-xl shadow-lg rounded-md bg-white">
              <h3 class="text-lg leading-6 font-medium text-gray-900">在地圖上選擇位置</h3>
              <p class="text-sm text-gray-500 mb-4">拖動圖釘以確定精確位置</p>
@@ -540,7 +540,7 @@
         </div>
     </div>
 
-    <div id="map-preview-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div id="map-preview-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-[4800]">
         <div class="relative top-10 mx-auto p-5 border w-full max-w-xl shadow-lg rounded-md bg-white">
              <h3 class="text-lg leading-6 font-medium text-gray-900">地圖預覽</h3>
              <p class="text-sm text-gray-500 mb-4">藍色圖釘為預設巡邏點，紅色為實際感應位置。</p>
@@ -583,7 +583,7 @@
         </div>
     </div>
     
-    <div id="patrol-map-modal" class="fixed inset-0 bg-white z-50 hidden">
+    <div id="patrol-map-modal" class="fixed inset-0 bg-white z-[1500] hidden">
         <header class="h-16 bg-white border-b flex justify-between items-center px-4">
             <h3 id="patrol-map-title" class="text-lg font-bold">巡邏地圖</h3>
             <button id="close-patrol-map-btn" class="text-gray-600 hover:text-gray-900">
@@ -591,7 +591,7 @@
             </button>
         </header>
         <div id="patrol-map-container" style="height: calc(100vh - 64px); position: relative;">
-            <div id="patrol-point-buttons" class="absolute bottom-0 left-0 right-0 bg-white/95 border-t px-3 py-2 flex gap-2 overflow-x-auto z-50"></div>
+            <div id="patrol-point-buttons" class="absolute bottom-0 left-0 right-0 bg-white/95 border-t shadow-md px-3 py-2 flex gap-2 overflow-x-auto z-[6000]" style="padding-bottom: env(safe-area-inset-bottom, 0px);"></div>
         </div>
     </div>
 
@@ -1723,8 +1723,7 @@
         document.getElementById('close-map-modal-btn').addEventListener('click', () => closeModal(mapModal));
         document.getElementById('close-map-preview-modal-btn').addEventListener('click', () => closeModal(mapPreviewModal));
         document.getElementById('close-patrol-map-btn').addEventListener('click', () => {
-            const buttonsContainer = document.getElementById('patrol-point-buttons');
-            if (buttonsContainer) buttonsContainer.innerHTML = '';
+            // 僅關閉地圖彈窗，不清空底部巡邏點列表，避免在移動端被隱藏
             closeModal(patrolMapModal);
         });
         document.getElementById('close-nfc-scan-modal-btn').addEventListener('click', () => closeModal(nfcPointScanModal));
@@ -2213,9 +2212,10 @@
             if (buttonsContainer) {
                 buttonsContainer.innerHTML = '';
                 // 在窄螢幕中加大底部內距與背景不透明度，提升可見性
-                buttonsContainer.style.padding = '8px';
+                buttonsContainer.style.padding = '10px';
                 buttonsContainer.style.background = 'rgba(255,255,255,0.95)';
-                buttonsContainer.style.zIndex = '1000';
+                buttonsContainer.style.boxShadow = '0 -2px 8px rgba(0,0,0,0.08)';
+                buttonsContainer.style.zIndex = '6000';
             }
 
             const today = new Date();
