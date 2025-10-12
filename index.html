@@ -770,8 +770,9 @@
         let scanMarker = null;
         let locationCircle = null;
 
-        let patrolMap = null;
-        let patrolPointMarkers = {};
+ let patrolMap = null;
+ let patrolPointMarkers = {};
+ let patrolPointButtons = {};
 
 
         // --- 權限設定 ---
@@ -2789,6 +2790,7 @@
         async function initializePatrolMap(task) {
             openModal(patrolMapModal);
             patrolPointMarkers = {}; // Reset markers
+            patrolPointButtons = {};
             const buttonsContainer = document.getElementById('patrol-point-buttons');
             if (buttonsContainer) {
                 buttonsContainer.innerHTML = '';
@@ -2888,11 +2890,13 @@
                         btn.className = `px-3 py-2 text-sm rounded border whitespace-nowrap ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
                         btn.textContent = `${point.code} ${point.name}`;
                         btn.style.flexShrink = '0';
+                        btn.dataset.pointId = point.internalId;
+                        btn.dataset.completed = isCompleted ? 'true' : 'false';
                         btn.addEventListener('click', () => {
                             patrolMap.setView(coords, Math.max(patrolMap.getZoom(), 18));
                             marker.openPopup();
-                            // 未完成的巡邏點，直接開啟 NFC 掃描視窗
-                            if (!isCompleted) {
+                            // 依據最新狀態判斷是否開啟NFC掃描
+                            if (btn.dataset.completed !== 'true') {
                                 document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
                                 nfcScanLog.innerHTML = '';
                                 openModal(nfcPointScanModal);
@@ -2900,6 +2904,7 @@
                             }
                         });
                         buttonsContainer.appendChild(btn);
+                        patrolPointButtons[point.internalId] = btn;
                     }
                 }
             });
@@ -2933,6 +2938,12 @@
                 if (isCompleted) {
                     marker.setIcon(greenIcon);
                     marker.off('click'); // Disable click after completion
+                    const btn = patrolPointButtons[pointId];
+                    if (btn) {
+                        btn.dataset.completed = 'true';
+                        btn.classList.remove('bg-red-100','text-red-800');
+                        btn.classList.add('bg-green-100','text-green-800');
+                    }
                 }
             }
         }
