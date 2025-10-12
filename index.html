@@ -677,7 +677,7 @@
         import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where, getDocs, Timestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+        import { getStorage, ref as storageRef, uploadBytes, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // --- Firebase 設定 ---
         const firebaseConfig = {
@@ -755,6 +755,7 @@
         let communitiesUnsubscribe = null;
         let usersUnsubscribe = null;
         let schedulesUnsubscribe = null;
+        let patrolLogsUnsubscribe = null;
         let editingCommunityId = null;
         let editingUserId = null;
         let editingScheduleId = null;
@@ -2085,6 +2086,14 @@
         document.getElementById('close-photo-view-modal-btn').addEventListener('click', () => closeModal(document.getElementById('photo-view-modal')));
         document.getElementById('close-patrol-map-btn').addEventListener('click', () => {
             // 僅關閉地圖彈窗，不清空底部巡邏點列表，避免在移動端被隱藏
+            if (patrolLogsUnsubscribe) { try { patrolLogsUnsubscribe(); } catch(e){}; patrolLogsUnsubscribe = null; }
+            const photoModal = document.getElementById('photo-capture-modal');
+            if (photoModal && !photoModal.classList.contains('hidden')) {
+                const video = document.getElementById('camera-stream');
+                if (video && video.srcObject) {
+                    try { video.srcObject.getTracks().forEach(t => t.stop()); } catch(e){}
+                }
+            }
             closeModal(patrolMapModal);
         });
         document.getElementById('close-nfc-scan-modal-btn').addEventListener('click', () => closeModal(nfcPointScanModal));
@@ -2478,13 +2487,19 @@
                 const { logId } = currentPhotoLogContext || {};
                 if (!logId) { alert('找不到要附加照片的紀錄'); closeModal(modal); return; }
                 const uploadData = [];
+                const metadata = { contentType: 'image/png' };
                 for (let i=0;i<items.length;i++){
                     const imgEl = items[i].querySelector('img');
                     const noteEl = items[i].querySelector('input');
                     const blob = await dataURLToBlob(imgEl.src);
                     const path = `logs/${logId}/${Date.now()}_${i}.png`;
                     const sref = storageRef(storage, path);
-                    await uploadBytes(sref, blob);
+                    try {
+                        await uploadBytes(sref, blob, metadata);
+                    } catch(upErr) {
+                        // 後援：直接以上傳 data URL 字串（避免某些環境 Blob 受限）
+                        await uploadString(sref, imgEl.src, 'data_url', metadata);
+                    }
                     const url = await getDownloadURL(sref);
                     uploadData.push({ url, note: (noteEl?.value || '').trim() });
                 }
@@ -2816,38 +2831,40 @@
                 buttonsContainer.style.zIndex = '6000';
             }
 
-            // 僅取「當次時段」的巡邏紀錄：以排程時間為中心建立時間窗口
+            // 僅取「當日」巡邏紀錄，並使用即時監聽以確保地圖與按鈕狀態同步更新
             const now = new Date();
-            const todayIndex = now.getDay();
-            const scheduledVal = task.weeklyTimes && task.weeklyTimes[todayIndex] ? task.weeklyTimes[todayIndex] : null;
-            let windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-            let windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            if (scheduledVal) {
-                if (typeof scheduledVal === 'string') {
-                    const [hh, mm] = scheduledVal.split(":").map(Number);
-                    const scheduled = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh || 0, mm || 0, 0, 0);
-                    windowStart = new Date(scheduled.getTime() - 120 * 60 * 1000);
-                    windowEnd = new Date(scheduled.getTime() + 120 * 60 * 1000);
-                } else {
-                    // 使用 start/end 作為窗口，允許提前/延後小緩衝（各加減15分鐘）
-                    const [sh, sm] = (scheduledVal.start || '00:00').split(":").map(Number);
-                    const [eh, em] = (scheduledVal.end || '23:59').split(":").map(Number);
-                    windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), sh || 0, sm || 0, 0, 0);
-                    windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eh || 23, em || 59, 59, 999);
-                    // 緩衝
-                    windowStart = new Date(windowStart.getTime() - 15 * 60 * 1000);
-                    windowEnd = new Date(windowEnd.getTime() + 15 * 60 * 1000);
-                }
-            }
-            const logsQuery = query(collection(db, "patrol_logs"),
+            const windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+            const windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            const logsQuery = query(
+                collection(db, "patrol_logs"),
                 where("scheduleId", "==", task.id),
                 where("timestamp", ">=", Timestamp.fromDate(windowStart)),
                 where("timestamp", "<=", Timestamp.fromDate(windowEnd))
             );
-            const logsSnapshot = await getDocs(logsQuery);
+            if (patrolLogsUnsubscribe) { try { patrolLogsUnsubscribe(); } catch(e){}; patrolLogsUnsubscribe = null; }
             const completedPointIds = new Set();
-            logsSnapshot.forEach(doc => {
-                completedPointIds.add(doc.data().patrolPointId);
+            const applyCompletedState = () => {
+                const points = task.patrolPoints || [];
+                points.forEach(point => {
+                    const isCompleted = completedPointIds.has(point.internalId);
+                    updatePatrolMapMarker(point.internalId, isCompleted);
+                    const btn = patrolPointButtons[point.internalId];
+                    if (btn) {
+                        btn.dataset.completed = isCompleted ? 'true' : 'false';
+                        btn.classList.toggle('bg-green-100', !!isCompleted);
+                        btn.classList.toggle('text-green-800', !!isCompleted);
+                        btn.classList.toggle('bg-red-100', !isCompleted);
+                        btn.classList.toggle('text-red-800', !isCompleted);
+                    }
+                });
+            };
+            patrolLogsUnsubscribe = onSnapshot(logsQuery, (snap) => {
+                completedPointIds.clear();
+                snap.forEach(docSnap => {
+                    const d = docSnap.data();
+                    if (d && d.patrolPointId) completedPointIds.add(d.patrolPointId);
+                });
+                applyCompletedState();
             });
 
             const redIcon = new L.Icon({
@@ -2950,6 +2967,11 @@
                     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
                     iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
                 });
+                const redIcon = new L.Icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                });
                 if (isCompleted) {
                     marker.setIcon(greenIcon);
                     marker.off('click'); // Disable click after completion
@@ -2958,6 +2980,14 @@
                         btn.dataset.completed = 'true';
                         btn.classList.remove('bg-red-100','text-red-800');
                         btn.classList.add('bg-green-100','text-green-800');
+                    }
+                } else {
+                    marker.setIcon(redIcon);
+                    const btn = patrolPointButtons[pointId];
+                    if (btn) {
+                        btn.dataset.completed = 'false';
+                        btn.classList.remove('bg-green-100','text-green-800');
+                        btn.classList.add('bg-red-100','text-red-800');
                     }
                 }
             }
