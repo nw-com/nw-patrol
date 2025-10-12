@@ -199,12 +199,23 @@
                         </div>
                     </div>
 
-                    <div id="page-patrol" class="page-content hidden">
-                        <h2 class="text-2xl font-bold mb-4">今日巡邏任務</h2>
-                        <div id="todays-patrols-list" class="space-y-4">
-                           <!-- Today's patrols will be loaded here -->
-                        </div>
-                    </div>
+    <div id="page-patrol" class="page-content hidden">
+        <div id="patrol-calendar" class="mb-4 bg-white rounded-lg shadow border p-4">
+            <div class="flex items-center justify-between">
+                <button id="cal-prev" class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-sm">上月</button>
+                <div id="cal-month-label" class="font-bold text-lg"></div>
+                <button id="cal-next" class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-sm">下月</button>
+            </div>
+            <div class="mt-3 grid grid-cols-7 gap-1 text-center text-xs text-gray-500">
+                <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+            </div>
+            <div id="patrol-calendar-days" class="mt-2 grid grid-cols-7 gap-2"></div>
+        </div>
+        <h2 id="selected-date-title" class="text-2xl font-bold mb-2">今日巡邏任務</h2>
+        <div id="todays-patrols-list" class="space-y-4">
+            <!-- Selected date patrols will be loaded here -->
+        </div>
+    </div>
 
                     <div id="page-data" class="page-content hidden">
                         <h2 class="text-2xl font-bold mb-4">巡邏紀錄查詢</h2>
@@ -826,7 +837,23 @@
                 populateScheduleFilters();
                 listenForSchedules();
             } else if (pageId === 'patrol') {
-                renderTodaysPatrols();
+                // 初始化月曆並預設選定今日
+                const today = new Date();
+                calendarState.year = today.getFullYear();
+                calendarState.month = today.getMonth();
+                buildCalendar(calendarState.year, calendarState.month);
+                setSelectedDate(today);
+                // 綁定月份切換
+                const prevBtn = document.getElementById('cal-prev');
+                const nextBtn = document.getElementById('cal-next');
+                prevBtn.onclick = () => {
+                    if (calendarState.month === 0) { calendarState.year -= 1; calendarState.month = 11; } else { calendarState.month -= 1; }
+                    buildCalendar(calendarState.year, calendarState.month);
+                };
+                nextBtn.onclick = () => {
+                    if (calendarState.month === 11) { calendarState.year += 1; calendarState.month = 0; } else { calendarState.month += 1; }
+                    buildCalendar(calendarState.year, calendarState.month);
+                };
             } else if (pageId === 'data') {
                 const dataFilterDate = document.getElementById('data-filter-date');
                 dataFilterDate.value = new Date().toISOString().split('T')[0];
@@ -1219,29 +1246,78 @@
         }
         
         // --- 巡邏頁面 ---
-        async function renderTodaysPatrols() {
-            todaysPatrolsList.innerHTML = '<p class="text-gray-500">正在載入今日任務...</p>';
+        // --- 巡邏月曆與依選定日期渲染 ---
+        let calendarState = { year: null, month: null, selectedDate: null };
+        function setSelectedDate(date) {
+            calendarState.selectedDate = date;
+            const title = document.getElementById('selected-date-title');
+            const isToday = isSameDate(date, new Date());
+            title.textContent = isToday ? '今日巡邏任務' : `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')} 巡邏任務`;
+            renderPatrolsForDate(date);
+        }
+
+        function isSameDate(a, b) {
+            return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+        }
+
+        function buildCalendar(year, month) {
+            const label = document.getElementById('cal-month-label');
+            label.textContent = `${year}年 ${month+1}月`;
+            const daysContainer = document.getElementById('patrol-calendar-days');
+            daysContainer.innerHTML = '';
+
+            const firstDay = new Date(year, month, 1);
+            const startWeekday = firstDay.getDay();
+            const daysInMonth = new Date(year, month+1, 0).getDate();
+
+            // 前置空白格
+            for (let i=0; i<startWeekday; i++) {
+                const empty = document.createElement('div');
+                empty.className = 'h-10';
+                daysContainer.appendChild(empty);
+            }
+
+            for (let d=1; d<=daysInMonth; d++) {
+                const date = new Date(year, month, d);
+                const btn = document.createElement('button');
+                btn.className = 'h-10 rounded border text-sm hover:bg-gray-50';
+                btn.textContent = String(d);
+                if (isSameDate(date, new Date())) {
+                    btn.className += ' bg-red-100 border-red-300 text-red-700 font-semibold';
+                }
+                btn.addEventListener('click', () => {
+                    setSelectedDate(date);
+                    // 高亮選中日期
+                    Array.from(daysContainer.querySelectorAll('button')).forEach(b => b.classList.remove('ring-2','ring-red-400'));
+                    btn.classList.add('ring-2','ring-red-400');
+                });
+                daysContainer.appendChild(btn);
+            }
+        }
+
+        async function renderPatrolsForDate(date) {
+            todaysPatrolsList.innerHTML = '<p class="text-gray-500">正在載入任務...</p>';
             if (!currentUser) return;
 
-            const today = new Date().getDay(); // 0 for Sunday, 1 for Monday...
+            const weekday = date.getDay();
             const q = query(collection(db, "schedules"), where("userId", "==", currentUser.uid));
             const querySnapshot = await getDocs(q);
-            
-            const todaysTasks = [];
+
+            const tasks = [];
             querySnapshot.forEach(doc => {
                 const schedule = { id: doc.id, ...doc.data() };
-                if (schedule.weeklyTimes && schedule.weeklyTimes[today]) {
-                    todaysTasks.push(schedule);
+                if (schedule.weeklyTimes && schedule.weeklyTimes[weekday]) {
+                    tasks.push(schedule);
                 }
             });
 
-            if (todaysTasks.length === 0) {
-                 todaysPatrolsList.innerHTML = '<p class="text-gray-500">今日無排定巡邏任務。</p>';
+            if (tasks.length === 0) {
+                 todaysPatrolsList.innerHTML = '<p class="text-gray-500">該日無排定巡邏任務。</p>';
                  return;
             }
 
             todaysPatrolsList.innerHTML = '';
-            todaysTasks.forEach(task => {
+            tasks.forEach(task => {
                 const card = document.createElement('div');
                 card.className = 'p-4 bg-white rounded-lg shadow border border-gray-200';
                 card.innerHTML = `
@@ -1251,7 +1327,7 @@
                             <p class="text-sm text-gray-500">${task.patrolCode}</p>
                         </div>
                         <div class="text-right">
-                             <p class="font-semibold text-red-600">${task.weeklyTimes[today]}</p>
+                             <p class="font-semibold text-red-600">${task.weeklyTimes[weekday]}</p>
                              <button class="start-patrol-btn mt-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm">開始巡邏</button>
                         </div>
                     </div>
