@@ -543,6 +543,10 @@
             <p class="text-sm text-gray-500 mb-4">可多張，拍完按儲存</p>
             <video id="camera-stream" class="w-full rounded-md bg-black" autoplay playsinline></video>
             <div class="flex gap-2 mt-3">
+                <select id="camera-select" class="px-2 py-2 border rounded-md">
+                    <option value="environment">後鏡頭</option>
+                    <option value="user">前鏡頭</option>
+                </select>
                 <button id="take-photo-btn" class="px-4 py-2 bg-red-500 text-white rounded-md">拍照</button>
                 <button id="save-photos-btn" class="px-4 py-2 bg-blue-500 text-white rounded-md">儲存</button>
                 <button id="close-photo-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md">關閉</button>
@@ -1759,18 +1763,35 @@
                     if (!logSnap.exists()) { alert('找不到紀錄'); return; }
                     const data = logSnap.data();
                     const urls = Array.isArray(data.photos) ? data.photos : [];
+                    const details = Array.isArray(data.photoDetails) ? data.photoDetails : [];
                     const modal = document.getElementById('photo-view-modal');
                     const grid = document.getElementById('photo-view-grid');
                     grid.innerHTML = '';
-                    if (urls.length === 0) {
+                    if (urls.length === 0 && details.length === 0) {
                         grid.innerHTML = '<p class="text-gray-500">此紀錄尚無照片</p>';
                     } else {
-                        urls.forEach(u => {
-                            const img = document.createElement('img');
-                            img.src = u;
-                            img.className = 'w-full rounded-md border';
-                            grid.appendChild(img);
-                        });
+                        if (details.length > 0) {
+                            details.forEach(item => {
+                                const wrap = document.createElement('div');
+                                wrap.className = 'flex flex-col gap-1';
+                                const img = document.createElement('img');
+                                img.src = item.url;
+                                img.className = 'w-full rounded-md border';
+                                const note = document.createElement('div');
+                                note.className = 'text-xs text-gray-600';
+                                note.textContent = item.note || '';
+                                wrap.appendChild(img);
+                                wrap.appendChild(note);
+                                grid.appendChild(wrap);
+                            });
+                        } else {
+                            urls.forEach(u => {
+                                const img = document.createElement('img');
+                                img.src = u;
+                                img.className = 'w-full rounded-md border';
+                                grid.appendChild(img);
+                            });
+                        }
                     }
                     openModal(modal);
                 } catch(err) {
@@ -2144,100 +2165,37 @@
             window.print();
         });
 
-        // 每月列印/匯出（以每一天查詢詳單並重建七欄明細）
+        // 每月列印/匯出（抬頭下方提供 7 欄 2 列表格）
         document.addEventListener('click', async (e) => {
             if (e.target && e.target.id === 'monthly-print-btn') {
-                const monthlyContainer = document.getElementById('data-monthly-container');
-                const table = monthlyContainer ? monthlyContainer.querySelector('table') : null;
-                if (!table) {
-                    alert('尚未有每月資料可列印');
-                    return;
-                }
                 const printContent = document.getElementById('print-area').cloneNode(true);
                 const wrapper = document.getElementById('print-content-wrapper');
                 wrapper.innerHTML = '';
                 // 標題
                 const titleEl = printContent.querySelector('#log-details-modal-title');
-                if (titleEl) titleEl.textContent = '每月巡邏紀錄明細';
+                if (titleEl) titleEl.textContent = '每月巡邏紀錄';
                 const tableContainer = printContent.querySelector('.table-container');
                 tableContainer.innerHTML = '';
-                // 建立七欄表頭
+                // 建立 7 欄 2 列表格（第一列標題、第二列空白）
                 const newTable = document.createElement('table');
-                newTable.className = 'w-full text-sm text-left text-gray-500';
-                const thead = document.createElement('thead');
-                thead.className = 'text-xs text-gray-700 uppercase bg-gray-50';
+                newTable.className = 'w-full text-sm border border-black border-collapse';
+                const tbody = document.createElement('tbody');
                 const headerRow = document.createElement('tr');
                 ['社區名稱', '巡邏姓名', '巡邏點編號', '巡邏點名稱', '定位GPS座標', '感應時間', '狀態'].forEach(text => {
-                    const th = document.createElement('th');
-                    th.className = 'px-4 py-2';
+                    const th = document.createElement('td');
+                    th.className = 'px-2 py-1 text-center border border-black';
                     th.textContent = text;
                     headerRow.appendChild(th);
                 });
-                thead.appendChild(headerRow);
-                const tbody = document.createElement('tbody');
-
-                // 從每月容器中取每一天，分別查詢 logs 並填入詳單
-                const rows = Array.from(table.querySelectorAll('tbody tr'));
-                for (const r of rows) {
-                    const dateStr = r.querySelector('td')?.textContent || '';
-                    if (!dateStr) continue;
-                    const day = new Date(dateStr);
-                    const startOfDay = new Date(day.setHours(0,0,0,0));
-                    const endOfDay = new Date(day.setHours(23,59,59,999));
-                    const logConstraints = [
-                        where('timestamp', '>=', Timestamp.fromDate(startOfDay)),
-                        where('timestamp', '<=', Timestamp.fromDate(endOfDay))
-                    ];
-                    const communityFilterEl = document.getElementById('data-filter-community');
-                    const communityFilterId = communityFilterEl ? communityFilterEl.value : '';
-                    switch (userProfile.role) {
-                        case ROLES.GUARD:
-                            logConstraints.push(where('userId','==', currentUser.uid));
-                            break;
-                        case ROLES.CHIEF:
-                            if (userProfile.communityId) logConstraints.push(where('communityId','==', userProfile.communityId));
-                            break;
-                        case ROLES.ADMIN:
-                        case ROLES.EXECUTIVE:
-                            if (communityFilterId) logConstraints.push(where('communityId','==', communityFilterId));
-                            break;
-                    }
-                    const logsSnap = await getDocs(query(collection(db,'patrol_logs'), ...logConstraints));
-                    const logs = [];
-                    logsSnap.forEach(d => logs.push({ id: d.id, ...d.data() }));
-                    // 依每筆 log 產生列（從 log 補足巡邏點資訊顯示）
-                    logs.forEach(log => {
-                        const c1 = log.communityName || '';
-                        const c2 = log.userName || '';
-                        const code = log.patrolPointCode || '';
-                        const name = log.patrolPointName || '';
-                        const gps = log.scanLocation || '';
-                        const dt = log.timestamp && log.timestamp.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
-                        const timeText = formatDateTime24(dt);
-                        let statusText = (log.status || '').trim();
-                        if (!statusText) {
-                            const hasPoint = !!(log.pointLocation);
-                            const hasScan = !!(log.scanLocation);
-                            if (hasPoint && hasScan) {
-                                const dist = calculateDistance(log.pointLocation, log.scanLocation);
-                                if (isFinite(dist)) {
-                                    statusText = dist <= 20 ? '正常' : `異常 (距離 ${dist.toFixed(0)}m)`;
-                                }
-                            }
-                            if (!statusText) statusText = gps ? '正常' : '異常';
-                        }
-                        const tr = document.createElement('tr');
-                        [c1, c2, code, name, gps, timeText, statusText].forEach(val => {
-                            const td = document.createElement('td');
-                            td.className = 'px-4 py-3';
-                            td.textContent = val;
-                            tr.appendChild(td);
-                        });
-                        tbody.appendChild(tr);
-                    });
+                const blankRow = document.createElement('tr');
+                for (let i = 0; i < 7; i++) {
+                    const td = document.createElement('td');
+                    td.className = 'px-2 py-4 border border-black';
+                    td.textContent = '';
+                    blankRow.appendChild(td);
                 }
-
-                newTable.appendChild(thead);
+                tbody.appendChild(headerRow);
+                tbody.appendChild(blankRow);
                 newTable.appendChild(tbody);
                 tableContainer.appendChild(newTable);
                 // 顯示列印標頭與時間
@@ -2406,15 +2364,47 @@
             currentPhotoLogContext = { patrolPoint, timestamp, scanLocation, logId };
             const modal = document.getElementById('photo-capture-modal');
             openModal(modal);
-            // Start camera
+            await startCamera('environment');
+            const select = document.getElementById('camera-select');
+            select.value = 'environment';
+        }
+
+        async function startCamera(facingMode){
             const video = document.getElementById('camera-stream');
+            // Stop existing tracks
+            if (video && video.srcObject) {
+                video.srcObject.getTracks().forEach(t => t.stop());
+                video.srcObject = null;
+            }
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // Try facingMode constraint
+                const constraints = { video: { facingMode } };
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = stream;
-            } catch(err) {
-                alert('無法啟用相機: ' + err.message);
+            } catch(err){
+                // Fallback: list devices and pick by label
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const cams = devices.filter(d => d.kind === 'videoinput');
+                    let deviceId = cams[0]?.deviceId;
+                    if (facingMode === 'environment') {
+                        const back = cams.find(d => /back|rear|environment/i.test(d.label));
+                        deviceId = back?.deviceId || deviceId;
+                    } else {
+                        const front = cams.find(d => /front|user/i.test(d.label));
+                        deviceId = front?.deviceId || deviceId;
+                    }
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: deviceId ? { exact: deviceId } : undefined } });
+                    video.srcObject = stream;
+                } catch(e){
+                    alert('無法啟用相機: ' + (err.message || e.message));
+                }
             }
         }
+
+        document.getElementById('camera-select').addEventListener('change', async (e) => {
+            await startCamera(e.target.value);
+        });
 
         function drawWatermark(canvas, img, context){
             const { patrolPoint, timestamp, scanLocation } = context;
@@ -2454,31 +2444,43 @@
             await new Promise(r => img.onload = r);
             const wmCanvas = document.createElement('canvas');
             drawWatermark(wmCanvas, img, currentPhotoLogContext);
+            const container = document.createElement('div');
+            container.className = 'flex flex-col gap-2';
             const preview = document.createElement('img');
             preview.src = wmCanvas.toDataURL('image/png');
             preview.className = 'w-full rounded-md border';
-            document.getElementById('captured-photos').appendChild(preview);
+            const note = document.createElement('input');
+            note.type = 'text';
+            note.placeholder = '備註（可留空）';
+            note.className = 'px-2 py-2 border rounded-md text-sm';
+            container.appendChild(preview);
+            container.appendChild(note);
+            document.getElementById('captured-photos').appendChild(container);
         });
 
         document.getElementById('save-photos-btn').addEventListener('click', async () => {
             const modal = document.getElementById('photo-capture-modal');
-            const previews = Array.from(document.getElementById('captured-photos').querySelectorAll('img'));
-            if (previews.length === 0) { closeModal(modal); return; }
+            const items = Array.from(document.getElementById('captured-photos').children);
+            if (items.length === 0) { closeModal(modal); return; }
             // Create log if not yet created; we used savePatrolLog before photo.
             // Attach photos directly to the created log using stored logId
             try {
                 const { logId } = currentPhotoLogContext || {};
                 if (!logId) { alert('找不到要附加照片的紀錄'); closeModal(modal); return; }
-                const uploadUrls = [];
-                for (let i=0;i<previews.length;i++){
-                    const blob = await dataURLToBlob(previews[i].src);
+                const uploadData = [];
+                for (let i=0;i<items.length;i++){
+                    const imgEl = items[i].querySelector('img');
+                    const noteEl = items[i].querySelector('input');
+                    const blob = await dataURLToBlob(imgEl.src);
                     const path = `logs/${logId}/${Date.now()}_${i}.png`;
                     const sref = storageRef(storage, path);
                     await uploadBytes(sref, blob);
                     const url = await getDownloadURL(sref);
-                    uploadUrls.push(url);
+                    uploadData.push({ url, note: (noteEl?.value || '').trim() });
                 }
-                await updateDoc(doc(db,'patrol_logs', logId), { photos: arrayUnion(...uploadUrls) });
+                // 將照片與備註一起寫入（保持舊結構兼容：若後續需要簡單 URL，仍可 map）
+                const urls = uploadData.map(d => d.url);
+                await updateDoc(doc(db,'patrol_logs', logId), { photos: arrayUnion(...urls), photoDetails: arrayUnion(...uploadData) });
                 alert('照片已儲存');
                 // Stop camera
                 const video = document.getElementById('camera-stream');
