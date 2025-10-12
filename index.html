@@ -597,7 +597,7 @@
         </div>
     </div>
 
-    <div id="nfc-point-scan-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center hidden z-50">
+    <div id="nfc-point-scan-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center hidden z-[7000]">
         <div class="bg-white p-6 rounded-lg shadow-xl text-center">
             <h3 id="nfc-scan-point-name" class="text-xl font-bold mb-2"></h3>
             <p class="text-gray-600 mb-4">請靠近對應的NFC標籤...</p>
@@ -2302,6 +2302,13 @@
                         btn.addEventListener('click', () => {
                             patrolMap.setView(coords, Math.max(patrolMap.getZoom(), 18));
                             marker.openPopup();
+                            // 未完成的巡邏點，直接開啟 NFC 掃描視窗
+                            if (!isCompleted) {
+                                document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
+                                nfcScanLog.innerHTML = '';
+                                openModal(nfcPointScanModal);
+                                startNFCScan(point);
+                            }
                         });
                         buttonsContainer.appendChild(btn);
                     }
