@@ -219,6 +219,11 @@
 
                     <div id="page-data" class="page-content hidden">
                         <h2 class="text-2xl font-bold mb-4">巡邏紀錄查詢</h2>
+                        <!-- Tabs -->
+                        <div id="data-tabs" class="mb-4 flex gap-2">
+                            <button id="tab-daily" class="px-4 py-2 rounded-md bg-red-500 text-white">每日</button>
+                            <button id="tab-monthly" class="px-4 py-2 rounded-md bg-gray-200 text-gray-700">每月</button>
+                        </div>
                          <!-- Filter Section -->
                         <div id="data-filters" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-gray-50 p-4 rounded-lg">
                             <div>
@@ -237,6 +242,9 @@
                         </div>
                         <div id="data-logs-container" class="space-y-4">
                             <!-- Daily log summaries will be loaded here -->
+                        </div>
+                        <div id="data-monthly-container" class="space-y-4 hidden">
+                            <!-- Monthly view will be rendered here -->
                         </div>
                     </div>
 
@@ -475,6 +483,13 @@
                             <button id="generate-nfc-code-btn" type="button" class="px-3 py-2 bg-blue-500 text-white rounded-md text-sm">產生</button>
                          </div>
                      </div>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <textarea id="patrol-point-desc" placeholder="巡邏點描述（選填）" class="px-3 py-2 border border-gray-300 rounded-md"></textarea>
+                         <label class="flex items-center space-x-2">
+                             <input type="checkbox" id="patrol-point-requires-confirm" class="h-4 w-4 border-gray-300 rounded">
+                             <span>到點需確認（例如拍照或簽名）</span>
+                         </label>
+                     </div>
                      <div>
                          <button id="save-patrol-point-btn" type="submit" class="px-4 py-2 bg-red-500 text-white rounded-md">儲存巡邏點</button>
                          <button id="cancel-edit-point-btn" type="button" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hidden">取消編輯</button>
@@ -489,6 +504,8 @@
                                 <th class="px-4 py-2">編號</th>
                                 <th class="px-4 py-2">名稱</th>
                                 <th class="px-4 py-2">位置</th>
+                                <th class="px-4 py-2">描述</th>
+                                <th class="px-4 py-2">需確認</th>
                                 <th class="px-4 py-2">NFC Code</th>
                                 <th class="px-4 py-2 text-right">操作</th>
                             </tr>
@@ -1097,8 +1114,30 @@
             }
             const days = ['日', '一', '二', '三', '四', '五', '六'];
             return Object.entries(weeklyTimes)
-                .map(([dayIndex, time]) => `週${days[dayIndex]} ${time}`)
+                .map(([dayIndex, val]) => {
+                    if (typeof val === 'string') {
+                        return `週${days[dayIndex]} ${val}`;
+                    }
+                    const s = val?.start || '--:--';
+                    const e = val?.end || '--:--';
+                    return `週${days[dayIndex]} ${s} - ${e}`;
+                })
                 .join(', ');
+        }
+
+        // 24-hour formatting helpers
+        function pad2(n){ return String(n).padStart(2,'0'); }
+        function formatDateTime24(date){
+            const y = date.getFullYear();
+            const m = pad2(date.getMonth()+1);
+            const d = pad2(date.getDate());
+            const hh = pad2(date.getHours());
+            const mm = pad2(date.getMinutes());
+            const ss = pad2(date.getSeconds());
+            return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+        }
+        function formatTime24(date){
+            return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
         }
 
 
@@ -1146,9 +1185,12 @@
             days.forEach((day, index) => {
                 const checkbox = document.getElementById(`schedule-day-${index}`);
                 if (checkbox.checked) {
-                    const timeInput = document.getElementById(`schedule-time-${index}`);
-                    if(timeInput.value) {
-                       weeklyTimes[index] = timeInput.value;
+                    const startInput = document.getElementById(`schedule-start-${index}`);
+                    const endInput = document.getElementById(`schedule-end-${index}`);
+                    const startVal = startInput.value;
+                    const endVal = endInput.value;
+                    if (startVal || endVal) {
+                        weeklyTimes[index] = { start: startVal || '', end: endVal || '' };
                     }
                 }
             });
@@ -1184,18 +1226,22 @@
             document.getElementById('patrol-points-schedule-info').textContent = `社區: ${schedule.communityName} | 巡邏編號: ${schedule.patrolCode}`;
             
             if (!schedule.patrolPoints || schedule.patrolPoints.length === 0) {
-                listEl.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500">尚無巡邏點</td></tr>`;
+                listEl.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-gray-500">尚無巡邏點</td></tr>`;
                 return;
             }
-            schedule.patrolPoints.forEach(p => {
+            schedule.patrolPoints.forEach((p, idx) => {
                 const row = document.createElement('tr');
                 row.className = 'bg-white border-b';
                 row.innerHTML = `
                     <td class="px-4 py-2">${p.code}</td>
                     <td class="px-4 py-2">${p.name}</td>
                     <td class="px-4 py-2 text-xs">${p.location}</td>
+                    <td class="px-4 py-2 text-xs">${p.desc || ''}</td>
+                    <td class="px-4 py-2">${p.requiresConfirm ? '是' : '否'}</td>
                     <td class="px-4 py-2 font-mono text-xs">${p.nfcCode}</td>
                     <td class="px-4 py-2 text-right">
+                        <button class="move-up-point-btn text-gray-600 hover:underline mr-2" data-id="${p.internalId}" ${idx===0 ? 'disabled' : ''}>上移</button>
+                        <button class="move-down-point-btn text-gray-600 hover:underline mr-2" data-id="${p.internalId}" ${idx===schedule.patrolPoints.length-1 ? 'disabled' : ''}>下移</button>
                         <button class="edit-point-btn font-medium text-blue-600 hover:underline mr-2" data-id="${p.internalId}">編輯</button>
                         <button class="delete-point-btn font-medium text-red-600 hover:underline" data-id="${p.internalId}">刪除</button>
                     </td>
@@ -1214,6 +1260,8 @@
                 location: form.querySelector('#patrol-point-location').value,
                 name: form.querySelector('#patrol-point-name').value,
                 nfcCode: form.querySelector('#patrol-point-nfc-code').value,
+                desc: form.querySelector('#patrol-point-desc')?.value || '',
+                requiresConfirm: !!form.querySelector('#patrol-point-requires-confirm')?.checked,
             };
 
             if (!newPoint.code || !newPoint.location || !newPoint.name || !newPoint.nfcCode) {
@@ -1327,7 +1375,13 @@
                             <p class="text-sm text-gray-500">${task.patrolCode}</p>
                         </div>
                         <div class="text-right">
-                             <p class="font-semibold text-red-600">${task.weeklyTimes[weekday]}</p>
+                             <p class="font-semibold text-red-600">${(() => {
+                                const val = task.weeklyTimes[weekday];
+                                if (typeof val === 'string') return val;
+                                const s = val?.start || '--:--';
+                                const e = val?.end || '--:--';
+                                return `${s} - ${e}`;
+                             })()}</p>
                              <button class="start-patrol-btn mt-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm">開始巡邏</button>
                         </div>
                     </div>
@@ -1357,7 +1411,13 @@
             const endOfDay = new Date(selectedDate.setHours(23, 59, 59, 999));
             const selectedDayIndex = selectedDate.getDay();
 
-            // 1. Get relevant schedules for the selected day
+            // Tab state & visibility
+            const isMonthly = document.getElementById('tab-monthly') && document.getElementById('tab-monthly').classList.contains('bg-red-500');
+            document.getElementById('data-logs-container').classList.toggle('hidden', !!isMonthly);
+            const monthlyEl = document.getElementById('data-monthly-container');
+            if (monthlyEl) monthlyEl.classList.toggle('hidden', !isMonthly);
+
+            // 1. Get relevant schedules for the selected period
             let scheduleConstraints = [];
             const communityFilterId = document.getElementById('data-filter-community').value;
 
@@ -1390,64 +1450,156 @@
             const relevantSchedules = [];
             schedulesSnapshot.forEach(doc => {
                 const schedule = { id: doc.id, ...doc.data() };
-                if (schedule.weeklyTimes && schedule.weeklyTimes[selectedDayIndex]) {
+                if (!isMonthly && schedule.weeklyTimes && schedule.weeklyTimes[selectedDayIndex]) {
                     relevantSchedules.push(schedule);
                 }
             });
 
-            if (relevantSchedules.length === 0) {
+            if (!isMonthly && relevantSchedules.length === 0) {
                 dataLogsContainer.innerHTML = `<p class="text-gray-500">在 ${selectedDateStr} 無相關巡邏排程。</p>`;
                 return;
             }
             
-            // 2. Get all logs for the selected day
-            const logsQuery = query(collection(db, "patrol_logs"), 
-                where("timestamp", ">=", Timestamp.fromDate(startOfDay)), 
-                where("timestamp", "<=", Timestamp.fromDate(endOfDay))
-            );
+            // 2. Get logs for the selected period, respecting role/community filters
+            const logConstraints = [];
+            if (!isMonthly) {
+                logConstraints.push(where("timestamp", ">=", Timestamp.fromDate(startOfDay)));
+                logConstraints.push(where("timestamp", "<=", Timestamp.fromDate(endOfDay)));
+            } else {
+                const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                const monthEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth()+1, 0, 23, 59, 59, 999);
+                logConstraints.push(where("timestamp", ">=", Timestamp.fromDate(monthStart)));
+                logConstraints.push(where("timestamp", "<=", Timestamp.fromDate(monthEnd)));
+            }
+
+            // Apply role/community restrictions for logs
+            switch (userProfile.role) {
+                case ROLES.GUARD:
+                    logConstraints.push(where("userId", "==", currentUser.uid));
+                    break;
+                case ROLES.CHIEF:
+                    if (userProfile.communityId) {
+                        logConstraints.push(where("communityId", "==", userProfile.communityId));
+                    }
+                    break;
+                case ROLES.ADMIN:
+                case ROLES.EXECUTIVE:
+                    if (communityFilterId) {
+                        logConstraints.push(where("communityId", "==", communityFilterId));
+                    }
+                    break;
+                default:
+                    // No logs for unknown role
+                    dataLogsContainer.innerHTML = '';
+                    return;
+            }
+
+            const logsQuery = query(collection(db, "patrol_logs"), ...logConstraints);
             const logsSnapshot = await getDocs(logsQuery);
             const selectedDayLogs = [];
             logsSnapshot.forEach(doc => {
                 selectedDayLogs.push({ id: doc.id, ...doc.data() });
             });
 
-            // 3. Group logs by scheduleId
-            const logsBySchedule = selectedDayLogs.reduce((acc, log) => {
-                const scheduleId = log.scheduleId;
-                if (!acc[scheduleId]) {
-                    acc[scheduleId] = [];
-                }
-                acc[scheduleId].push(log);
-                return acc;
-            }, {});
+            if (!isMonthly) {
+                // 3. Group logs by scheduleId
+                const logsBySchedule = selectedDayLogs.reduce((acc, log) => {
+                    const scheduleId = log.scheduleId;
+                    if (!acc[scheduleId]) {
+                        acc[scheduleId] = [];
+                    }
+                    acc[scheduleId].push(log);
+                    return acc;
+                }, {});
 
-            // 4. Render schedule blocks
-            dataLogsContainer.innerHTML = '';
-            relevantSchedules.forEach(schedule => {
-                const logsForThisSchedule = logsBySchedule[schedule.id] || [];
-                const totalPoints = schedule.patrolPoints?.length || 0;
-                const completedPoints = new Set(logsForThisSchedule.map(l => l.patrolPointId)).size;
+                // 4. Render schedule blocks
+                dataLogsContainer.innerHTML = '';
+                relevantSchedules.forEach(schedule => {
+                    const logsForThisSchedule = logsBySchedule[schedule.id] || [];
+                    const totalPoints = schedule.patrolPoints?.length || 0;
+                    const completedPoints = new Set(logsForThisSchedule.map(l => l.patrolPointId)).size;
 
-                const card = document.createElement('div');
-                card.className = 'p-4 bg-white rounded-lg shadow border border-gray-200 cursor-pointer hover:bg-gray-50';
-                card.innerHTML = `
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <p class="font-bold text-lg text-gray-800">${schedule.communityName}</p>
-                            <p class="text-sm text-gray-500">${schedule.patrolCode} (${schedule.userName})</p>
-                        </div>
-                        <div class="text-right">
+                    const card = document.createElement('div');
+                    card.className = 'p-4 bg-white rounded-lg shadow border border-gray-200 cursor-pointer hover:bg-gray-50';
+                    card.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="font-bold text-lg text-gray-800">${schedule.communityName}</p>
+                                <p class="text-sm text-gray-500">${schedule.patrolCode} (${schedule.userName})</p>
+                            </div>
+                            <div class="text-right">
                              <p class="font-semibold text-lg">${completedPoints} / ${totalPoints}</p>
                              <p class="text-xs text-gray-500">已完成/總數</p>
+                            </div>
                         </div>
-                    </div>
-                `;
-                card.addEventListener('click', () => {
-                    renderLogDetailsModal(schedule, logsForThisSchedule);
+                    `;
+                    card.addEventListener('click', () => {
+                        renderLogDetailsModal(schedule, logsForThisSchedule);
+                    });
+                    dataLogsContainer.appendChild(card);
                 });
-                dataLogsContainer.appendChild(card);
-            });
+            } else {
+                // Monthly aggregation to table
+                const month = new Date(selectedDateStr);
+                const daysInMonth = new Date(month.getFullYear(), month.getMonth()+1, 0).getDate();
+                const countsByDay = Array(daysInMonth).fill(0);
+                selectedDayLogs.forEach(log => {
+                    const dt = log.timestamp && log.timestamp.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
+                    countsByDay[dt.getDate()-1]++;
+                });
+                const monthlyContainer = document.getElementById('data-monthly-container');
+                if (monthlyContainer) {
+                    monthlyContainer.innerHTML = '';
+                    const table = document.createElement('table');
+                    table.className = 'min-w-full divide-y divide-gray-200';
+                    table.innerHTML = `
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">日期</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">紀錄筆數</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200"></tbody>
+                    `;
+                    const tbody = table.querySelector('tbody');
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const tr = document.createElement('tr');
+                        tr.classList.add('hover:bg-gray-50','cursor-pointer');
+                        const dateStr = `${month.getFullYear()}-${String(month.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                        tr.innerHTML = `
+                            <td class="px-4 py-2">${dateStr}</td>
+                            <td class="px-4 py-2">${countsByDay[d-1]}</td>
+                        `;
+                        tr.addEventListener('click', () => {
+                            const dateInput = document.getElementById('data-filter-date');
+                            if (dateInput) dateInput.value = dateStr;
+                            const dailyBtn = document.getElementById('tab-daily');
+                            if (dailyBtn) dailyBtn.click();
+                        });
+                        tbody.appendChild(tr);
+                    }
+                    monthlyContainer.appendChild(table);
+                }
+            }
         }
+
+        // Tabs interactions
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'tab-daily' || e.target.id === 'tab-monthly') {
+                const dailyBtn = document.getElementById('tab-daily');
+                const monthlyBtn = document.getElementById('tab-monthly');
+                const makeActive = (btn, active) => {
+                    btn.classList.toggle('bg-red-500', active);
+                    btn.classList.toggle('text-white', active);
+                    btn.classList.toggle('bg-gray-200', !active);
+                    btn.classList.toggle('text-gray-700', !active);
+                };
+                const isMonthly = e.target.id === 'tab-monthly';
+                makeActive(dailyBtn, !isMonthly);
+                makeActive(monthlyBtn, isMonthly);
+                loadAndRenderDataPage();
+            }
+        });
 
         function renderLogDetailsModal(schedule, logs) {
             const modalTitle = document.getElementById('log-details-modal-title');
@@ -1511,7 +1663,7 @@
                     <td class="px-4 py-3">${schedule.userName}</td>
                     <td class="px-4 py-3">${point.code} (${point.name})</td>
                     <td class="px-4 py-3 text-xs">${locationButton}</td>
-                    <td class="px-4 py-3">${isCompleted ? log.timestamp.toDate().toLocaleString() : '--'}</td>
+                    <td class="px-4 py-3">${isCompleted ? formatDateTime24(log.timestamp.toDate()) : '--'}</td>
                     <td class="px-4 py-3">
                         <span class="px-2 py-1 text-xs font-semibold rounded-full ${statusColor}">
                             ${statusText}
@@ -1621,9 +1773,10 @@
                 document.getElementById('schedule-form').reset();
                  document.querySelectorAll('#weekly-times-container input[type="checkbox"]').forEach((cb, index) => {
                     cb.checked = false;
-                    const timeInput = document.getElementById(`schedule-time-${index}`);
-                    timeInput.disabled = true;
-                    timeInput.value = '';
+                    const startInput = document.getElementById(`schedule-start-${index}`);
+                    const endInput = document.getElementById(`schedule-end-${index}`);
+                    startInput.disabled = true; startInput.value = '';
+                    endInput.disabled = true; endInput.value = '';
                  });
 
                 
@@ -1639,13 +1792,20 @@
                     document.getElementById('schedule-user').value = sourceData.userId || '';
                     document.getElementById('schedule-patrol-code').value = `${sourceData.patrolCode}-副本`;
                     if (sourceData.weeklyTimes) {
-                         Object.entries(sourceData.weeklyTimes).forEach(([dayIndex, time]) => {
+                         Object.entries(sourceData.weeklyTimes).forEach(([dayIndex, val]) => {
                              const checkbox = document.getElementById(`schedule-day-${dayIndex}`);
-                             const timeInput = document.getElementById(`schedule-time-${dayIndex}`);
-                             if (checkbox && timeInput) {
+                             const startInput = document.getElementById(`schedule-start-${dayIndex}`);
+                             const endInput = document.getElementById(`schedule-end-${dayIndex}`);
+                             if (checkbox && startInput && endInput) {
                                 checkbox.checked = true;
-                                timeInput.value = time;
-                                timeInput.disabled = false;
+                                if (typeof val === 'string') {
+                                    startInput.value = val; endInput.value = '';
+                                } else {
+                                    startInput.value = val.start || '';
+                                    endInput.value = val.end || '';
+                                }
+                                startInput.disabled = false;
+                                endInput.disabled = false;
                              }
                          });
                     }
@@ -1676,19 +1836,27 @@
                      
                      document.querySelectorAll('#weekly-times-container input[type="checkbox"]').forEach((cb, index) => {
                         cb.checked = false;
-                        const timeInput = document.getElementById(`schedule-time-${index}`);
-                        timeInput.disabled = true;
-                        timeInput.value = '';
+                        const startInput = document.getElementById(`schedule-start-${index}`);
+                        const endInput = document.getElementById(`schedule-end-${index}`);
+                        startInput.disabled = true; startInput.value = '';
+                        endInput.disabled = true; endInput.value = '';
                      });
                      
                      if (data.weeklyTimes) {
-                         Object.entries(data.weeklyTimes).forEach(([dayIndex, time]) => {
+                         Object.entries(data.weeklyTimes).forEach(([dayIndex, val]) => {
                              const checkbox = document.getElementById(`schedule-day-${dayIndex}`);
-                             const timeInput = document.getElementById(`schedule-time-${dayIndex}`);
-                             if (checkbox && timeInput) {
+                             const startInput = document.getElementById(`schedule-start-${dayIndex}`);
+                             const endInput = document.getElementById(`schedule-end-${dayIndex}`);
+                             if (checkbox && startInput && endInput) {
                                 checkbox.checked = true;
-                                timeInput.value = time;
-                                timeInput.disabled = false;
+                                if (typeof val === 'string') {
+                                    startInput.value = val; endInput.value = '';
+                                } else {
+                                    startInput.value = val.start || '';
+                                    endInput.value = val.end || '';
+                                }
+                                startInput.disabled = false;
+                                endInput.disabled = false;
                              }
                          });
                      }
@@ -1727,6 +1895,10 @@
                     form.querySelector('#patrol-point-location').value = point.location;
                     form.querySelector('#patrol-point-name').value = point.name;
                     form.querySelector('#patrol-point-nfc-code').value = point.nfcCode;
+                    const descEl = form.querySelector('#patrol-point-desc');
+                    const confirmEl = form.querySelector('#patrol-point-requires-confirm');
+                    if (descEl) descEl.value = point.desc || '';
+                    if (confirmEl) confirmEl.checked = !!point.requiresConfirm;
                     document.getElementById('patrol-point-form-title').textContent = '編輯巡邏點';
                     document.getElementById('cancel-edit-point-btn').classList.remove('hidden');
                 }
@@ -1745,6 +1917,22 @@
                     currentScheduleForPoints.patrolPoints = updatedPoints;
                     renderPatrolPoints(currentScheduleForPoints);
                 }
+            }
+
+            // Reorder patrol points
+            if (e.target.classList.contains('move-up-point-btn') || e.target.classList.contains('move-down-point-btn')) {
+                const id = e.target.dataset.id;
+                const points = [...(currentScheduleForPoints.patrolPoints || [])];
+                const idx = points.findIndex(p => p.internalId === id);
+                if (idx === -1) return;
+                const isUp = e.target.classList.contains('move-up-point-btn');
+                const swapIdx = isUp ? idx - 1 : idx + 1;
+                if (swapIdx < 0 || swapIdx >= points.length) return;
+                [points[idx], points[swapIdx]] = [points[swapIdx], points[idx]];
+                const scheduleRef = doc(db, 'schedules', currentScheduleForPoints.id);
+                await updateDoc(scheduleRef, { patrolPoints: points });
+                currentScheduleForPoints.patrolPoints = points;
+                renderPatrolPoints(currentScheduleForPoints);
             }
             
             // GPS Buttons
@@ -1859,7 +2047,14 @@
 
             // 顯示列印標頭與時間
             printContent.querySelector('#print-header').classList.remove('hidden');
-            printContent.querySelector('#print-date').textContent = `報告生成時間: ${new Date().toLocaleString()}`;
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mm = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            printContent.querySelector('#print-date').textContent = `報告生成時間: ${y}-${m}-${d} ${hh}:${mm}:${ss}`;
             // 隱藏按鈕區塊
             const btnBar = printContent.querySelector('.print-hide');
             if (btnBar) btnBar.classList.add('hidden');
@@ -1897,11 +2092,17 @@
                     <input id="schedule-day-${index}" type="checkbox" class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
                     <label for="schedule-day-${index}" class="ml-3 block text-sm font-medium text-gray-700">${day}</label>
                 </div>
-                <input type="time" id="schedule-time-${index}" class="w-32 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" disabled>
+                <div class="flex items-center gap-2">
+                    <label for="schedule-start-${index}" class="text-xs text-gray-600">開始</label>
+                    <input type="time" id="schedule-start-${index}" class="w-28 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" disabled>
+                    <label for="schedule-end-${index}" class="text-xs text-gray-600">結束</label>
+                    <input type="time" id="schedule-end-${index}" class="w-28 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" disabled>
+                </div>
             `;
             weeklyTimesContainer.appendChild(div);
             div.querySelector(`#schedule-day-${index}`).addEventListener('change', (e) => {
-                div.querySelector(`#schedule-time-${index}`).disabled = !e.target.checked;
+                div.querySelector(`#schedule-start-${index}`).disabled = !e.target.checked;
+                div.querySelector(`#schedule-end-${index}`).disabled = !e.target.checked;
             });
         });
 
@@ -1919,7 +2120,7 @@
         
         function scanLogMessage(message) {
             const p = document.createElement('p');
-            const time = new Date().toLocaleTimeString();
+            const time = formatTime24(new Date());
             p.innerHTML = `<span class="font-mono text-gray-400">[${time}]</span> ${message}`;
             nfcScanLog.prepend(p);
         }
@@ -2299,15 +2500,25 @@
             // 僅取「當次時段」的巡邏紀錄：以排程時間為中心建立時間窗口
             const now = new Date();
             const todayIndex = now.getDay();
-            const scheduledTimeStr = task.weeklyTimes && task.weeklyTimes[todayIndex] ? task.weeklyTimes[todayIndex] : null;
+            const scheduledVal = task.weeklyTimes && task.weeklyTimes[todayIndex] ? task.weeklyTimes[todayIndex] : null;
             let windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
             let windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            if (scheduledTimeStr) {
-                const [hh, mm] = scheduledTimeStr.split(":").map(Number);
-                const scheduled = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh || 0, mm || 0, 0, 0);
-                // 以排程時間為中心 ±120 分鐘窗口（可依需求調整）
-                windowStart = new Date(scheduled.getTime() - 120 * 60 * 1000);
-                windowEnd = new Date(scheduled.getTime() + 120 * 60 * 1000);
+            if (scheduledVal) {
+                if (typeof scheduledVal === 'string') {
+                    const [hh, mm] = scheduledVal.split(":").map(Number);
+                    const scheduled = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh || 0, mm || 0, 0, 0);
+                    windowStart = new Date(scheduled.getTime() - 120 * 60 * 1000);
+                    windowEnd = new Date(scheduled.getTime() + 120 * 60 * 1000);
+                } else {
+                    // 使用 start/end 作為窗口，允許提前/延後小緩衝（各加減15分鐘）
+                    const [sh, sm] = (scheduledVal.start || '00:00').split(":").map(Number);
+                    const [eh, em] = (scheduledVal.end || '23:59').split(":").map(Number);
+                    windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), sh || 0, sm || 0, 0, 0);
+                    windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eh || 23, em || 59, 59, 999);
+                    // 緩衝
+                    windowStart = new Date(windowStart.getTime() - 15 * 60 * 1000);
+                    windowEnd = new Date(windowEnd.getTime() + 15 * 60 * 1000);
+                }
             }
             const logsQuery = query(collection(db, "patrol_logs"),
                 where("scheduleId", "==", task.id),
