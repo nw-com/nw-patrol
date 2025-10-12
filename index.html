@@ -536,6 +536,32 @@
         </div>
     </div>
 
+    <!-- Photo Capture Modal -->
+    <div id="photo-capture-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-[5000]">
+        <div class="relative top-10 mx-auto p-5 border w-full max-w-xl shadow-lg rounded-md bg-white">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">拍攝巡邏照片</h3>
+            <p class="text-sm text-gray-500 mb-4">可多張，拍完按儲存</p>
+            <video id="camera-stream" class="w-full rounded-md bg-black" autoplay playsinline></video>
+            <div class="flex gap-2 mt-3">
+                <button id="take-photo-btn" class="px-4 py-2 bg-red-500 text-white rounded-md">拍照</button>
+                <button id="save-photos-btn" class="px-4 py-2 bg-blue-500 text-white rounded-md">儲存</button>
+                <button id="close-photo-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md">關閉</button>
+            </div>
+            <div id="captured-photos" class="grid grid-cols-3 gap-2 mt-4"></div>
+        </div>
+    </div>
+
+    <!-- Photo View Modal -->
+    <div id="photo-view-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-[5000]">
+        <div class="relative top-10 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">查看巡邏照片</h3>
+                <button id="close-photo-view-modal-btn" class="px-4 py-2 bg-gray-800 text-white rounded-md">關閉</button>
+            </div>
+            <div id="photo-view-grid" class="grid grid-cols-3 gap-3"></div>
+        </div>
+    </div>
+
     <div id="log-details-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
         <div id="print-area" class="relative top-5 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
             <div class="mt-3">
@@ -646,7 +672,8 @@
         // 匯入 Firebase 模組
         import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where, getDocs, Timestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // --- Firebase 設定 ---
         const firebaseConfig = {
@@ -660,11 +687,12 @@
         };
         
         // --- 應用程式初始化 ---
-        let app, auth, db;
+        let app, auth, db, storage;
         try {
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
+            storage = getStorage(app);
             document.getElementById('firebase-status').textContent = '已連接';
             document.getElementById('firebase-status').className = 'text-green-600';
         } catch(e) {
@@ -1119,11 +1147,19 @@
             return Object.entries(weeklyTimes)
                 .map(([dayIndex, val]) => {
                     if (typeof val === 'string') {
-                        return `週${days[dayIndex]} ${val}`;
+                        // enforce 24-hour HH:MM format
+                        const [hh, mm] = String(val).split(':');
+                        const h2 = String(hh).padStart(2,'0');
+                        const m2 = String(mm || '00').padStart(2,'0');
+                        return `週${days[dayIndex]} ${h2}:${m2}`;
                     }
                     const s = val?.start || '--:--';
                     const e = val?.end || '--:--';
-                    return `週${days[dayIndex]} ${s} - ${e}`;
+                    const [sh, sm] = String(s).split(':');
+                    const [eh, em] = String(e).split(':');
+                    const s24 = `${String(sh||'00').padStart(2,'0')}:${String(sm||'00').padStart(2,'0')}`;
+                    const e24 = `${String(eh||'00').padStart(2,'0')}:${String(em||'00').padStart(2,'0')}`;
+                    return `週${days[dayIndex]} ${s24} - ${e24}`;
                 })
                 .join(', ');
         }
@@ -1659,6 +1695,7 @@
                         actionsHtml = `
                             <button class="edit-log-btn text-blue-600 hover:underline text-xs" data-log-id="${log.id}">編輯</button>
                             <button class="delete-log-btn text-red-600 hover:underline text-xs ml-2" data-log-id="${log.id}">刪除</button>
+                            <button class="view-photos-btn text-purple-600 hover:underline text-xs ml-2" data-log-id="${log.id}">查看照片</button>
                         `;
                     } else {
                         actionsHtml = `<button class="add-log-btn text-green-600 hover:underline text-xs">補登</button>`;
@@ -1711,6 +1748,34 @@
             if (e.target.classList.contains('delete-community-btn')) {
                 if (confirm('確定要刪除此社區嗎？')) {
                     await deleteDoc(doc(db, "communities", e.target.dataset.id));
+                }
+            }
+
+            // View photos for a log
+            if (e.target.classList.contains('view-photos-btn')) {
+                const logId = e.target.dataset.logId;
+                try {
+                    const logSnap = await getDoc(doc(db, 'patrol_logs', logId));
+                    if (!logSnap.exists()) { alert('找不到紀錄'); return; }
+                    const data = logSnap.data();
+                    const urls = Array.isArray(data.photos) ? data.photos : [];
+                    const modal = document.getElementById('photo-view-modal');
+                    const grid = document.getElementById('photo-view-grid');
+                    grid.innerHTML = '';
+                    if (urls.length === 0) {
+                        grid.innerHTML = '<p class="text-gray-500">此紀錄尚無照片</p>';
+                    } else {
+                        urls.forEach(u => {
+                            const img = document.createElement('img');
+                            img.src = u;
+                            img.className = 'w-full rounded-md border';
+                            grid.appendChild(img);
+                        });
+                    }
+                    openModal(modal);
+                } catch(err) {
+                    console.error(err);
+                    alert('載入照片失敗');
                 }
             }
 
@@ -1995,6 +2060,7 @@
         });
         document.getElementById('close-map-modal-btn').addEventListener('click', () => closeModal(mapModal));
         document.getElementById('close-map-preview-modal-btn').addEventListener('click', () => closeModal(mapPreviewModal));
+        document.getElementById('close-photo-view-modal-btn').addEventListener('click', () => closeModal(document.getElementById('photo-view-modal')));
         document.getElementById('close-patrol-map-btn').addEventListener('click', () => {
             // 僅關閉地圖彈窗，不清空底部巡邏點列表，避免在移動端被隱藏
             closeModal(patrolMapModal);
@@ -2078,8 +2144,8 @@
             window.print();
         });
 
-        // 每月列印/匯出
-        document.addEventListener('click', (e) => {
+        // 每月列印/匯出（以每一天查詢詳單並重建七欄明細）
+        document.addEventListener('click', async (e) => {
             if (e.target && e.target.id === 'monthly-print-btn') {
                 const monthlyContainer = document.getElementById('data-monthly-container');
                 const table = monthlyContainer ? monthlyContainer.querySelector('table') : null;
@@ -2090,13 +2156,90 @@
                 const printContent = document.getElementById('print-area').cloneNode(true);
                 const wrapper = document.getElementById('print-content-wrapper');
                 wrapper.innerHTML = '';
-                // 置換標題
+                // 標題
                 const titleEl = printContent.querySelector('#log-details-modal-title');
-                if (titleEl) titleEl.textContent = '每月巡邏紀錄彙總';
-                // 複製每月表格
+                if (titleEl) titleEl.textContent = '每月巡邏紀錄明細';
                 const tableContainer = printContent.querySelector('.table-container');
                 tableContainer.innerHTML = '';
-                tableContainer.appendChild(table.cloneNode(true));
+                // 建立七欄表頭
+                const newTable = document.createElement('table');
+                newTable.className = 'w-full text-sm text-left text-gray-500';
+                const thead = document.createElement('thead');
+                thead.className = 'text-xs text-gray-700 uppercase bg-gray-50';
+                const headerRow = document.createElement('tr');
+                ['社區名稱', '巡邏姓名', '巡邏點編號', '巡邏點名稱', '定位GPS座標', '感應時間', '狀態'].forEach(text => {
+                    const th = document.createElement('th');
+                    th.className = 'px-4 py-2';
+                    th.textContent = text;
+                    headerRow.appendChild(th);
+                });
+                thead.appendChild(headerRow);
+                const tbody = document.createElement('tbody');
+
+                // 從每月容器中取每一天，分別查詢 logs 並填入詳單
+                const rows = Array.from(table.querySelectorAll('tbody tr'));
+                for (const r of rows) {
+                    const dateStr = r.querySelector('td')?.textContent || '';
+                    if (!dateStr) continue;
+                    const day = new Date(dateStr);
+                    const startOfDay = new Date(day.setHours(0,0,0,0));
+                    const endOfDay = new Date(day.setHours(23,59,59,999));
+                    const logConstraints = [
+                        where('timestamp', '>=', Timestamp.fromDate(startOfDay)),
+                        where('timestamp', '<=', Timestamp.fromDate(endOfDay))
+                    ];
+                    const communityFilterEl = document.getElementById('data-filter-community');
+                    const communityFilterId = communityFilterEl ? communityFilterEl.value : '';
+                    switch (userProfile.role) {
+                        case ROLES.GUARD:
+                            logConstraints.push(where('userId','==', currentUser.uid));
+                            break;
+                        case ROLES.CHIEF:
+                            if (userProfile.communityId) logConstraints.push(where('communityId','==', userProfile.communityId));
+                            break;
+                        case ROLES.ADMIN:
+                        case ROLES.EXECUTIVE:
+                            if (communityFilterId) logConstraints.push(where('communityId','==', communityFilterId));
+                            break;
+                    }
+                    const logsSnap = await getDocs(query(collection(db,'patrol_logs'), ...logConstraints));
+                    const logs = [];
+                    logsSnap.forEach(d => logs.push({ id: d.id, ...d.data() }));
+                    // 依每筆 log 產生列（從 log 補足巡邏點資訊顯示）
+                    logs.forEach(log => {
+                        const c1 = log.communityName || '';
+                        const c2 = log.userName || '';
+                        const code = log.patrolPointCode || '';
+                        const name = log.patrolPointName || '';
+                        const gps = log.scanLocation || '';
+                        const dt = log.timestamp && log.timestamp.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
+                        const timeText = formatDateTime24(dt);
+                        let statusText = (log.status || '').trim();
+                        if (!statusText) {
+                            const hasPoint = !!(log.pointLocation);
+                            const hasScan = !!(log.scanLocation);
+                            if (hasPoint && hasScan) {
+                                const dist = calculateDistance(log.pointLocation, log.scanLocation);
+                                if (isFinite(dist)) {
+                                    statusText = dist <= 20 ? '正常' : `異常 (距離 ${dist.toFixed(0)}m)`;
+                                }
+                            }
+                            if (!statusText) statusText = gps ? '正常' : '異常';
+                        }
+                        const tr = document.createElement('tr');
+                        [c1, c2, code, name, gps, timeText, statusText].forEach(val => {
+                            const td = document.createElement('td');
+                            td.className = 'px-4 py-3';
+                            td.textContent = val;
+                            tr.appendChild(td);
+                        });
+                        tbody.appendChild(tr);
+                    });
+                }
+
+                newTable.appendChild(thead);
+                newTable.appendChild(tbody);
+                tableContainer.appendChild(newTable);
                 // 顯示列印標頭與時間
                 printContent.querySelector('#print-header').classList.remove('hidden');
                 printContent.querySelector('#print-date').textContent = `報告生成時間: ${formatDateTime24(new Date())}`;
@@ -2205,13 +2348,21 @@
                 getGPSLocation(
                     (coords) => {
                         scanLogMessage(`GPS位置已獲取`);
-                        savePatrolLog(targetPoint, new Date(), coords);
+                        const ts = new Date();
+                        (async () => {
+                            const logId = await savePatrolLog(targetPoint, ts, coords);
+                            openPhotoCapture(targetPoint, ts, coords, logId);
+                        })();
                         closeModal(document.getElementById('nfc-point-scan-modal'));
                         updatePatrolMapMarker(targetPoint.internalId, true);
                     },
                     () => { // Error callback
                         scanLogMessage("<span class='text-red-500'>無法獲取GPS位置</span>");
-                        savePatrolLog(targetPoint, new Date(), null); // Save without location
+                        const ts = new Date();
+                        (async () => {
+                            const logId = await savePatrolLog(targetPoint, ts, null); // Save without location
+                            openPhotoCapture(targetPoint, ts, null, logId);
+                        })();
                         closeModal(document.getElementById('nfc-point-scan-modal'));
                         updatePatrolMapMarker(targetPoint.internalId, true);
                     }
@@ -2238,14 +2389,119 @@
                     patrolPointCode: patrolPoint.code,
                     nfcCode: patrolPoint.nfcCode,
                     timestamp: timestamp,
-                    scanLocation: scanLocation || null
+                    scanLocation: scanLocation || null,
+                    photos: []
                 };
-                await addDoc(collection(db, "patrol_logs"), logData);
+                const docRef = await addDoc(collection(db, "patrol_logs"), logData);
+                return docRef.id;
             } catch (error) {
                 console.error("寫入 Firestore 失敗: ", error);
                 scanLogMessage("<span class='text-red-500'>儲存紀錄至雲端失敗！</span>");
             }
         }
+
+        // --- Photo capture & watermark ---
+        let currentPhotoLogContext = null;
+        async function openPhotoCapture(patrolPoint, timestamp, scanLocation, logId){
+            currentPhotoLogContext = { patrolPoint, timestamp, scanLocation, logId };
+            const modal = document.getElementById('photo-capture-modal');
+            openModal(modal);
+            // Start camera
+            const video = document.getElementById('camera-stream');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+            } catch(err) {
+                alert('無法啟用相機: ' + err.message);
+            }
+        }
+
+        function drawWatermark(canvas, img, context){
+            const { patrolPoint, timestamp, scanLocation } = context;
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            const textLines = [
+                `巡邏點: ${patrolPoint.code} (${patrolPoint.name})`,
+                `巡邏者: ${activePatrol.userName}`,
+                `時間: ${formatDateTime24(timestamp)}`,
+                `GPS: ${scanLocation || 'N/A'}`
+            ];
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.fillRect(0, canvas.height-90, canvas.width, 90);
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px sans-serif';
+            textLines.forEach((t, i) => ctx.fillText(t, 10, canvas.height - 65 + i*20));
+        }
+
+        async function dataURLToBlob(dataUrl){
+            const res = await fetch(dataUrl);
+            return await res.blob();
+        }
+
+        document.getElementById('take-photo-btn').addEventListener('click', async () => {
+            const video = document.getElementById('camera-stream');
+            if (!video || !currentPhotoLogContext) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth || 1280;
+            canvas.height = video.videoHeight || 720;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // Apply watermark
+            const img = new Image();
+            img.src = canvas.toDataURL('image/png');
+            await new Promise(r => img.onload = r);
+            const wmCanvas = document.createElement('canvas');
+            drawWatermark(wmCanvas, img, currentPhotoLogContext);
+            const preview = document.createElement('img');
+            preview.src = wmCanvas.toDataURL('image/png');
+            preview.className = 'w-full rounded-md border';
+            document.getElementById('captured-photos').appendChild(preview);
+        });
+
+        document.getElementById('save-photos-btn').addEventListener('click', async () => {
+            const modal = document.getElementById('photo-capture-modal');
+            const previews = Array.from(document.getElementById('captured-photos').querySelectorAll('img'));
+            if (previews.length === 0) { closeModal(modal); return; }
+            // Create log if not yet created; we used savePatrolLog before photo.
+            // Attach photos directly to the created log using stored logId
+            try {
+                const { logId } = currentPhotoLogContext || {};
+                if (!logId) { alert('找不到要附加照片的紀錄'); closeModal(modal); return; }
+                const uploadUrls = [];
+                for (let i=0;i<previews.length;i++){
+                    const blob = await dataURLToBlob(previews[i].src);
+                    const path = `logs/${logId}/${Date.now()}_${i}.png`;
+                    const sref = storageRef(storage, path);
+                    await uploadBytes(sref, blob);
+                    const url = await getDownloadURL(sref);
+                    uploadUrls.push(url);
+                }
+                await updateDoc(doc(db,'patrol_logs', logId), { photos: arrayUnion(...uploadUrls) });
+                alert('照片已儲存');
+                // Stop camera
+                const video = document.getElementById('camera-stream');
+                if (video && video.srcObject) {
+                    video.srcObject.getTracks().forEach(t => t.stop());
+                }
+                document.getElementById('captured-photos').innerHTML = '';
+                closeModal(modal);
+            } catch(err){
+                console.error(err);
+                alert('儲存照片失敗');
+            }
+        });
+
+        document.getElementById('close-photo-modal-btn').addEventListener('click', () => {
+            const modal = document.getElementById('photo-capture-modal');
+            const video = document.getElementById('camera-stream');
+            if (video && video.srcObject) {
+                video.srcObject.getTracks().forEach(t => t.stop());
+            }
+            document.getElementById('captured-photos').innerHTML = '';
+            closeModal(modal);
+        });
         
         // --- Helper Functions ---
         function generateAlphanumericCode(length) {
