@@ -223,6 +223,7 @@
                         <div id="data-tabs" class="mb-4 flex gap-2">
                             <button id="tab-daily" class="px-4 py-2 rounded-md bg-red-500 text-white">每日</button>
                             <button id="tab-monthly" class="px-4 py-2 rounded-md bg-gray-200 text-gray-700">每月</button>
+                            <button id="monthly-print-btn" class="ml-auto px-4 py-2 rounded-md bg-blue-500 text-white hidden">每月列印/匯出PDF</button>
                         </div>
                          <!-- Filter Section -->
                         <div id="data-filters" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-gray-50 p-4 rounded-lg">
@@ -547,12 +548,14 @@
                     <table class="w-full text-sm text-left text-gray-500" id="log-details-table">
                         <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                             <tr>
-                                <th class="px-4 py-2">社區</th>
-                                <th class="px-4 py-2">保全</th>
+                                <th class="px-4 py-2">社區名稱</th>
+                                <th class="px-4 py-2">巡邏姓名</th>
                                 <th class="px-4 py-2">巡邏點編號</th>
-                                <th class="px-4 py-2">定位地圖</th>
+                                <th class="px-4 py-2">巡邏點名稱</th>
+                                <th class="px-4 py-2">定位GPS座標</th>
                                 <th class="px-4 py-2">感應時間</th>
                                 <th class="px-4 py-2">狀態</th>
+                                <th id="log-actions-header" class="px-4 py-2 print-hide">操作</th>
                             </tr>
                         </thead>
                         <tbody id="log-details-list">
@@ -1416,6 +1419,8 @@
             document.getElementById('data-logs-container').classList.toggle('hidden', !!isMonthly);
             const monthlyEl = document.getElementById('data-monthly-container');
             if (monthlyEl) monthlyEl.classList.toggle('hidden', !isMonthly);
+            const monthlyPrintBtn = document.getElementById('monthly-print-btn');
+            if (monthlyPrintBtn) monthlyPrintBtn.classList.toggle('hidden', !isMonthly);
 
             // 1. Get relevant schedules for the selected period
             let scheduleConstraints = [];
@@ -1597,6 +1602,8 @@
                 const isMonthly = e.target.id === 'tab-monthly';
                 makeActive(dailyBtn, !isMonthly);
                 makeActive(monthlyBtn, isMonthly);
+                const monthlyPrintBtn = document.getElementById('monthly-print-btn');
+                if (monthlyPrintBtn) monthlyPrintBtn.classList.toggle('hidden', !isMonthly);
                 loadAndRenderDataPage();
             }
         });
@@ -2003,13 +2010,13 @@
             const wrapper = document.getElementById('print-content-wrapper');
             wrapper.innerHTML = '';
 
-            // 重建表格：首列為欄位名稱；其後為資料列
+            // 重建表格：首列為欄位名稱（七欄）；其後為資料列
             const newTable = document.createElement('table');
             newTable.className = table.className;
             const thead = document.createElement('thead');
             thead.className = table.querySelector('thead').className;
             const headerRow = document.createElement('tr');
-            ['社區', '保全', '巡邏點編號', '定位地圖', '感應時間', '狀態'].forEach(text => {
+            ['社區名稱', '巡邏姓名', '巡邏點編號', '巡邏點名稱', '定位GPS座標', '感應時間', '狀態'].forEach(text => {
                 const th = document.createElement('th');
                 th.className = 'px-4 py-2';
                 th.textContent = text;
@@ -2020,20 +2027,34 @@
 
             rows.forEach(row => {
                 const cells = Array.from(row.querySelectorAll('td'));
-                // 取前6欄（排除操作欄）
-                const dataCells = cells.slice(0, 6).map(td => {
-                    const cell = document.createElement('td');
-                    cell.className = 'px-4 py-3';
-                    // 將定位地圖的按鈕文字改為純座標字串
-                    if (td.querySelector('.show-map-preview-btn')) {
-                        cell.textContent = td.querySelector('.show-map-preview-btn').textContent || td.textContent;
-                    } else {
-                        cell.textContent = td.textContent;
-                    }
-                    return cell;
-                });
+                const c1 = cells[0]?.textContent || '';
+                const c2 = cells[1]?.textContent || '';
+                // 第三欄為「編號 (名稱)」，需拆分
+                const codeNameText = cells[2]?.textContent || '';
+                let code = codeNameText;
+                let name = '';
+                const idxParen = codeNameText.indexOf('(');
+                if (idxParen > -1) {
+                    code = codeNameText.slice(0, idxParen).trim();
+                    name = codeNameText.slice(idxParen+1).replace(')','').trim();
+                }
+                // GPS座標優先使用掃描位置，缺則使用設定位置
+                let gps = '';
+                const btn = cells[3]?.querySelector('.show-map-preview-btn');
+                if (btn) {
+                    gps = btn.dataset.scanLocation || btn.dataset.pointLocation || (btn.textContent || '');
+                } else {
+                    gps = cells[3]?.textContent || '';
+                }
+                const timeText = cells[4]?.textContent || '';
+                const statusText = cells[5]?.textContent || '';
                 const newRow = document.createElement('tr');
-                dataCells.forEach(dc => newRow.appendChild(dc));
+                [c1, c2, code, name, gps, timeText, statusText].forEach(val => {
+                    const td = document.createElement('td');
+                    td.className = 'px-4 py-3';
+                    td.textContent = val;
+                    newRow.appendChild(td);
+                });
                 newTbody.appendChild(newRow);
             });
 
@@ -2048,19 +2069,42 @@
             // 顯示列印標頭與時間
             printContent.querySelector('#print-header').classList.remove('hidden');
             const now = new Date();
-            const y = now.getFullYear();
-            const m = String(now.getMonth() + 1).padStart(2, '0');
-            const d = String(now.getDate()).padStart(2, '0');
-            const hh = String(now.getHours()).padStart(2, '0');
-            const mm = String(now.getMinutes()).padStart(2, '0');
-            const ss = String(now.getSeconds()).padStart(2, '0');
-            printContent.querySelector('#print-date').textContent = `報告生成時間: ${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+            printContent.querySelector('#print-date').textContent = `報告生成時間: ${formatDateTime24(now)}`;
             // 隱藏按鈕區塊
             const btnBar = printContent.querySelector('.print-hide');
             if (btnBar) btnBar.classList.add('hidden');
 
             wrapper.appendChild(printContent);
             window.print();
+        });
+
+        // 每月列印/匯出
+        document.addEventListener('click', (e) => {
+            if (e.target && e.target.id === 'monthly-print-btn') {
+                const monthlyContainer = document.getElementById('data-monthly-container');
+                const table = monthlyContainer ? monthlyContainer.querySelector('table') : null;
+                if (!table) {
+                    alert('尚未有每月資料可列印');
+                    return;
+                }
+                const printContent = document.getElementById('print-area').cloneNode(true);
+                const wrapper = document.getElementById('print-content-wrapper');
+                wrapper.innerHTML = '';
+                // 置換標題
+                const titleEl = printContent.querySelector('#log-details-modal-title');
+                if (titleEl) titleEl.textContent = '每月巡邏紀錄彙總';
+                // 複製每月表格
+                const tableContainer = printContent.querySelector('.table-container');
+                tableContainer.innerHTML = '';
+                tableContainer.appendChild(table.cloneNode(true));
+                // 顯示列印標頭與時間
+                printContent.querySelector('#print-header').classList.remove('hidden');
+                printContent.querySelector('#print-date').textContent = `報告生成時間: ${formatDateTime24(new Date())}`;
+                const btnBar = printContent.querySelector('.print-hide');
+                if (btnBar) btnBar.classList.add('hidden');
+                wrapper.appendChild(printContent);
+                window.print();
+            }
         });
 
 
