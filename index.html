@@ -59,7 +59,15 @@
 
         
     </style>
-</head>
+        <style>
+            /* 僅列印 print-area，隱藏其他內容 */
+            @media print {
+                body * { visibility: hidden !important; }
+                #print-area, #print-area * { visibility: visible !important; }
+                #print-area { position: absolute; left: 0; top: 0; width: 100%; }
+            }
+        </style>
+    </head>
 <body class="bg-gray-100">
 
     <!-- App 根容器 -->
@@ -756,6 +764,10 @@
         let editingCommunityId = null;
         let editingUserId = null;
         let editingScheduleId = null;
+        // Data page printing/export context
+        let currentDataLogsRaw = [];
+        let currentDataSelectedDateStr = '';
+        let currentDataIsMonthly = false;
         let currentScheduleForPoints = null; // Holds the full schedule object being edited for points
         let activePatrol = null; // Holds schedule data for the currently active patrol scan
         
@@ -1658,6 +1670,11 @@
                 selectedDayLogs.push({ id: doc.id, ...doc.data() });
             });
 
+            // 保存目前資料查詢的原始紀錄與日期供列印/匯出使用
+            currentDataLogsRaw = selectedDayLogs;
+            currentDataSelectedDateStr = selectedDateStr;
+            currentDataIsMonthly = !!isMonthly;
+
             if (!isMonthly) {
                 // 3. Group logs by scheduleId
                 const logsBySchedule = selectedDayLogs.reduce((acc, log) => {
@@ -1818,10 +1835,92 @@
         const monthlyPrintBtnEl = document.getElementById('monthly-print-btn');
         const dailyExportBtnEl = document.getElementById('daily-export-pdf-btn');
         const monthlyExportBtnEl = document.getElementById('monthly-export-pdf-btn');
-        if (dailyPrintBtnEl) dailyPrintBtnEl.addEventListener('click', () => window.print());
-        if (monthlyPrintBtnEl) monthlyPrintBtnEl.addEventListener('click', () => window.print());
-        if (dailyExportBtnEl) dailyExportBtnEl.addEventListener('click', () => exportContainerToPDF(document.getElementById('data-logs-container'), '每日巡邏紀錄.pdf'));
-        if (monthlyExportBtnEl) monthlyExportBtnEl.addEventListener('click', () => exportContainerToPDF(document.getElementById('data-monthly-container'), '每月巡邏紀錄.pdf'));
+        if (dailyPrintBtnEl) dailyPrintBtnEl.addEventListener('click', () => { buildDailyPrintArea(); window.print(); });
+        if (monthlyPrintBtnEl) monthlyPrintBtnEl.addEventListener('click', () => { buildMonthlyPrintArea(); window.print(); });
+        if (dailyExportBtnEl) dailyExportBtnEl.addEventListener('click', () => { buildDailyPrintArea(); exportContainerToPDF(document.getElementById('print-area'), '每日巡邏紀錄.pdf'); });
+        if (monthlyExportBtnEl) monthlyExportBtnEl.addEventListener('click', () => { buildMonthlyPrintArea(); exportContainerToPDF(document.getElementById('print-area'), '每月巡邏紀錄.pdf'); });
+
+        function buildPrintAreaTable(rows, title, dateStr) {
+            const area = document.getElementById('print-area');
+            if (!area) return;
+            const safeDate = dateStr || '';
+            const headerHtml = `
+                <div class="mb-4">
+                    <h3 class="text-xl font-bold text-center">${title}</h3>
+                    <p class="text-sm text-gray-600 text-center">${safeDate}</p>
+                </div>
+            `;
+            const tableHeader = `
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2">社區名稱</th>
+                        <th class="px-4 py-2">巡邏姓名</th>
+                        <th class="px-4 py-2">巡邏點編號</th>
+                        <th class="px-4 py-2">巡邏點名稱</th>
+                        <th class="px-4 py-2">定位GPS座標</th>
+                        <th class="px-4 py-2">感應時間</th>
+                        <th class="px-4 py-2">狀態</th>
+                    </tr>
+                </thead>
+            `;
+            let tbodyHtml = '';
+            if (!rows || rows.length === 0) {
+                tbodyHtml = `<tr><td colspan="7" class="text-center py-4 text-gray-500">無紀錄</td></tr>`;
+            } else {
+                tbodyHtml = rows.map(log => {
+                    const ts = log.timestamp && log.timestamp.toDate ? log.timestamp.toDate() : (log.timestamp ? new Date(log.timestamp) : null);
+                    const timeStr = ts ? formatDateTime24(ts) : '--';
+                    const gps = log.scanLocation || 'N/A';
+                    const status = log.status || '—';
+                    return `
+                        <tr class="bg-white border-b">
+                            <td class="px-4 py-2">${log.communityName || ''}</td>
+                            <td class="px-4 py-2">${log.userName || ''}</td>
+                            <td class="px-4 py-2">${log.patrolPointCode || ''}</td>
+                            <td class="px-4 py-2">${log.patrolPointName || ''}</td>
+                            <td class="px-4 py-2 text-xs">${gps}</td>
+                            <td class="px-4 py-2">${timeStr}</td>
+                            <td class="px-4 py-2">${status}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+            area.innerHTML = `
+                ${headerHtml}
+                <div class="table-container">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        ${tableHeader}
+                        <tbody>
+                            ${tbodyHtml}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function buildDailyPrintArea() {
+            // 依目前分頁輸出當頁已完成的巡邏紀錄
+            const start = (dailyPaginationState.currentPage - 1) * dailyPaginationState.pageSize;
+            const end = start + dailyPaginationState.pageSize;
+            const pageItems = (dailyPaginationState.items || []).slice(start, end);
+            const logs = pageItems.flatMap(({ logs }) => logs || []);
+            buildPrintAreaTable(logs, '每日巡邏紀錄', currentDataSelectedDateStr);
+        }
+
+        function buildMonthlyPrintArea() {
+            // 依目前分頁顯示的日期範圍，輸出當範圍的紀錄
+            const startIndex = (monthlyPaginationState.currentPage - 1) * monthlyPaginationState.pageSize;
+            const endIndex = startIndex + monthlyPaginationState.pageSize;
+            const pageRows = (monthlyPaginationState.rows || []).slice(startIndex, endIndex);
+            const dateSet = new Set(pageRows.map(r => r.dateStr));
+            const rows = (currentDataLogsRaw || []).filter(log => {
+                const ts = log.timestamp && log.timestamp.toDate ? log.timestamp.toDate() : (log.timestamp ? new Date(log.timestamp) : null);
+                if (!ts) return false;
+                const ds = `${ts.getFullYear()}-${String(ts.getMonth()+1).padStart(2,'0')}-${String(ts.getDate()).padStart(2,'0')}`;
+                return dateSet.has(ds);
+            });
+            buildPrintAreaTable(rows, '每月巡邏紀錄', currentDataSelectedDateStr);
+        }
 
         function renderLogDetailsModal(schedule, logs) {
             const modalTitle = document.getElementById('log-details-modal-title');
