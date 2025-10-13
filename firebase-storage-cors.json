@@ -1,0 +1,16 @@
+[
+  {
+    "origin": [
+      "https://nw-com.github.io",
+      "http://localhost:8000",
+      "http://localhost:8001",
+      "http://localhost:8002",
+      "http://127.0.0.1:8000",
+      "http://127.0.0.1:8001",
+      "http://127.0.0.1:8002"
+    ],
+    "method": ["GET", "PUT", "POST", "HEAD"],
+    "responseHeader": ["Content-Type", "Authorization", "x-goog-meta-foo", "x-goog-meta-bar", "x-goog-upload-status", "x-goog-upload-url"],
+    "maxAgeSeconds": 3600
+  }
+]
