@@ -171,9 +171,13 @@
                         </div>
                          <!-- Filter Section -->
                         <div id="data-filters" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-gray-50 p-4 rounded-lg">
-                            <div>
+                            <div id="data-date-filter-container">
                                 <label for="data-filter-date" class="block text-sm font-medium text-gray-700">選擇日期</label>
                                 <input type="date" id="data-filter-date" class="mt-1 block w-full pl-3 pr-2 py-2 text-base border-gray-300 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm rounded-md">
+                            </div>
+                            <div id="data-month-filter-container" class="hidden">
+                                <label for="data-filter-month" class="block text-sm font-medium text-gray-700">選擇月份</label>
+                                <input type="month" id="data-filter-month" class="mt-1 block w-full pl-3 pr-2 py-2 text-base border-gray-300 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm rounded-md">
                             </div>
                             <div id="data-community-filter-container" class="hidden">
                                 <label for="data-filter-community" class="block text-sm font-medium text-gray-700">依社區篩選</label>
@@ -854,6 +858,18 @@
             } else if (pageId === 'data') {
                 const dataFilterDate = document.getElementById('data-filter-date');
                 dataFilterDate.value = new Date().toISOString().split('T')[0];
+                // Ensure date filter visible and month filter hidden by default
+                const dateFilterContainer = document.getElementById('data-date-filter-container');
+                const monthFilterContainer = document.getElementById('data-month-filter-container');
+                if (dateFilterContainer && monthFilterContainer) {
+                    dateFilterContainer.classList.remove('hidden');
+                    monthFilterContainer.classList.add('hidden');
+                }
+                const monthInput = document.getElementById('data-filter-month');
+                if (monthInput) {
+                    const today = new Date();
+                    monthInput.value = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+                }
 
                 const setupFiltersAndLoad = async () => {
                     const dataCommunityFilterContainer = document.getElementById('data-community-filter-container');
@@ -1415,19 +1431,20 @@
             dataLogsContainer.innerHTML = '<p class="text-gray-500">正在載入紀錄...</p>';
             if (!userProfile) return;
 
-            const selectedDateStr = document.getElementById('data-filter-date').value;
+            // Tab state & visibility
+            const isMonthly = document.getElementById('tab-monthly') && document.getElementById('tab-monthly').classList.contains('bg-red-500');
+            // Read filter input based on tab
+            const selectedDateStr = isMonthly ? document.getElementById('data-filter-month').value : document.getElementById('data-filter-date').value;
             if (!selectedDateStr) {
-                dataLogsContainer.innerHTML = '<p class="text-red-500">請選擇一個日期進行查詢。</p>';
+                dataLogsContainer.innerHTML = isMonthly ? '<p class="text-red-500">請選擇一個月份進行查詢。</p>' : '<p class="text-red-500">請選擇一個日期進行查詢。</p>';
                 return;
             }
 
-            const selectedDate = new Date(selectedDateStr);
+            const selectedDate = new Date(isMonthly ? `${selectedDateStr}-01` : selectedDateStr);
             const startOfDay = new Date(selectedDate.setHours(0, 0, 0, 0));
             const endOfDay = new Date(selectedDate.setHours(23, 59, 59, 999));
             const selectedDayIndex = selectedDate.getDay();
 
-            // Tab state & visibility
-            const isMonthly = document.getElementById('tab-monthly') && document.getElementById('tab-monthly').classList.contains('bg-red-500');
             document.getElementById('data-logs-container').classList.toggle('hidden', !!isMonthly);
             const monthlyEl = document.getElementById('data-monthly-container');
             if (monthlyEl) monthlyEl.classList.toggle('hidden', !isMonthly);
@@ -1437,6 +1454,12 @@
             // 1. Get relevant schedules for the selected period
             let scheduleConstraints = [];
             const communityFilterId = document.getElementById('data-filter-community').value;
+
+            // Enforce community selection for monthly queries for admin/executive
+            if (isMonthly && [ROLES.ADMIN, ROLES.EXECUTIVE].includes(userProfile.role) && !communityFilterId) {
+                dataLogsContainer.innerHTML = '<p class="text-red-500">請選擇社區以查詢整月巡邏紀錄。</p>';
+                return;
+            }
 
             switch (userProfile.role) {
                 case ROLES.GUARD:
@@ -1557,7 +1580,7 @@
                 });
             } else {
                 // Monthly aggregation to table
-                const month = new Date(selectedDateStr);
+                const month = selectedDate;
                 const daysInMonth = new Date(month.getFullYear(), month.getMonth()+1, 0).getDate();
                 const countsByDay = Array(daysInMonth).fill(0);
                 selectedDayLogs.forEach(log => {
@@ -1572,6 +1595,7 @@
                     table.innerHTML = `
                         <thead class="bg-gray-50">
                             <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">社區</th>
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">日期</th>
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">紀錄筆數</th>
                             </tr>
@@ -1579,11 +1603,14 @@
                         <tbody class="bg-white divide-y divide-gray-200"></tbody>
                     `;
                     const tbody = table.querySelector('tbody');
+                    const communityName = (selectedDayLogs[0] && selectedDayLogs[0].communityName) || '—';
+                    let monthTotal = 0;
                     for (let d = 1; d <= daysInMonth; d++) {
                         const tr = document.createElement('tr');
                         tr.classList.add('hover:bg-gray-50','cursor-pointer');
                         const dateStr = `${month.getFullYear()}-${String(month.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
                         tr.innerHTML = `
+                            <td class="px-4 py-2">${communityName}</td>
                             <td class="px-4 py-2">${dateStr}</td>
                             <td class="px-4 py-2">${countsByDay[d-1]}</td>
                         `;
@@ -1594,7 +1621,16 @@
                             if (dailyBtn) dailyBtn.click();
                         });
                         tbody.appendChild(tr);
+                        monthTotal += countsByDay[d-1];
                     }
+                    const totalTr = document.createElement('tr');
+                    totalTr.classList.add('bg-gray-100','font-semibold');
+                    totalTr.innerHTML = `
+                        <td class="px-4 py-2">${communityName}</td>
+                        <td class="px-4 py-2">合計</td>
+                        <td class="px-4 py-2">${monthTotal}</td>
+                    `;
+                    tbody.appendChild(totalTr);
                     monthlyContainer.appendChild(table);
                 }
             }
@@ -1614,6 +1650,26 @@
                 const isMonthly = e.target.id === 'tab-monthly';
                 makeActive(dailyBtn, !isMonthly);
                 makeActive(monthlyBtn, isMonthly);
+                // Toggle filter inputs by tab
+                const dateFilterContainer = document.getElementById('data-date-filter-container');
+                const monthFilterContainer = document.getElementById('data-month-filter-container');
+                if (dateFilterContainer && monthFilterContainer) {
+                    dateFilterContainer.classList.toggle('hidden', isMonthly);
+                    monthFilterContainer.classList.toggle('hidden', !isMonthly);
+                    if (isMonthly) {
+                        const monthInput = document.getElementById('data-filter-month');
+                        if (monthInput && !monthInput.value) {
+                            const today = new Date();
+                            const ym = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+                            monthInput.value = ym;
+                        }
+                    } else {
+                        const dateInput = document.getElementById('data-filter-date');
+                        if (dateInput && !dateInput.value) {
+                            dateInput.value = new Date().toISOString().split('T')[0];
+                        }
+                    }
+                }
                 loadAndRenderDataPage();
             }
         });
@@ -2039,6 +2095,14 @@
 
         // Event listeners for filters
         document.getElementById('data-apply-filters-btn').addEventListener('click', loadAndRenderDataPage);
+        // Update on month change
+        const monthInputEl = document.getElementById('data-filter-month');
+        if (monthInputEl) {
+            monthInputEl.addEventListener('change', () => {
+                const monthlyBtn = document.getElementById('tab-monthly');
+                if (monthlyBtn) monthlyBtn.click();
+            });
+        }
         document.getElementById('filter-community').addEventListener('change', listenForSchedules);
         document.getElementById('filter-user').addEventListener('change', listenForSchedules);
         document.getElementById('clear-filters-btn').addEventListener('click', () => {
