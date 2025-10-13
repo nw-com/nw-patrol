@@ -2557,6 +2557,8 @@
 
         async function startNFCScan(point) {
             scanLogMessage(`準備掃描: ${point.name}...`);
+            // 設定目前掃描目標，供切換 QR 掃碼使用
+            lastScanTargetPoint = point;
             // 巡邏時段規則：未到開始時間禁止掃描；超過結束時間允許但標記超時
             try {
                 const { start } = getTodayScheduleWindow(activePatrol || {});
@@ -2644,6 +2646,8 @@
         async function startQRScan(targetPoint){
             qrScanLog.innerHTML = '';
             document.getElementById('qr-scan-point-name').textContent = `掃描: ${targetPoint.name}`;
+            // 先開啟視窗，再檢查巡邏時段，避免看起來「無法開啟」
+            openModal(qrScanModal);
             // 巡邏時段規則：未到開始時間禁止掃描
             try {
                 const { start } = getTodayScheduleWindow(activePatrol || {});
@@ -2653,7 +2657,6 @@
                     return;
                 }
             } catch(e){}
-            openModal(qrScanModal);
             // 優先使用 BarcodeDetector
             try {
                 if ('BarcodeDetector' in window) {
@@ -2764,14 +2767,12 @@
 
         document.getElementById('close-qr-scan-modal-btn').addEventListener('click', closeQRScan);
         let lastScanTargetPoint = null;
-        const originalStartNFCScan = startNFCScan;
-        startNFCScan = async function(point){ lastScanTargetPoint = point; return originalStartNFCScan(point); };
         document.getElementById('switch-to-qr-btn').addEventListener('click', () => {
             if (lastScanTargetPoint) {
                 closeModal(nfcPointScanModal);
                 startQRScan(lastScanTargetPoint);
             } else {
-                alert('尚未識別巡邏點，請從地圖點選巡邏點後再試。');
+                alert('尚未選擇巡邏點：請先在巡邏地圖點選欲掃描的巡邏點。');
             }
         });
         
@@ -3444,6 +3445,8 @@
                             marker.openPopup();
                             // 依據最新狀態判斷是否開啟NFC掃描
                             if (btn.dataset.completed !== 'true') {
+                                // 記錄目前選擇的巡邏點，供「改用QR掃碼」使用
+                                lastScanTargetPoint = point;
                                 document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
                                 nfcScanLog.innerHTML = '';
                                 openModal(nfcPointScanModal);
