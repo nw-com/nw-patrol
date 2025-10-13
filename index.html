@@ -455,6 +455,7 @@
                                 <th class="px-4 py-2">位置</th>
                                 <th class="px-4 py-2">描述</th>
                                 <th class="px-4 py-2">需確認</th>
+                                <th class="px-4 py-2">任務</th>
                                 <th class="px-4 py-2">NFC Code</th>
                                 <th class="px-4 py-2 text-right">操作</th>
                             </tr>
@@ -471,7 +472,7 @@
             </div>
         </div>
     </div>
-    
+
     <div id="map-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-[5000]">
         <div class="relative top-10 mx-auto p-5 border w-full max-w-xl shadow-lg rounded-md bg-white">
              <h3 class="text-lg leading-6 font-medium text-gray-900">在地圖上選擇位置</h3>
@@ -480,6 +481,39 @@
              <div class="items-center px-4 py-3 text-center">
                 <button id="confirm-map-selection-btn" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-300">確定位置</button>
                 <button id="close-map-modal-btn" class="ml-2 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tasks Management Modal -->
+    <div id="tasks-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-[5000]">
+        <div class="relative top-10 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">巡邏點任務管理</h3>
+                <button id="close-tasks-modal-btn" class="px-4 py-2 bg-gray-800 text-white rounded-md">關閉</button>
+            </div>
+            <p id="tasks-point-info" class="text-sm text-gray-500 mb-3"></p>
+            <div class="border rounded-md p-3 bg-gray-50 mb-4">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
+                    <input type="text" id="task-name-input" class="px-3 py-2 border rounded-md md:col-span-2" placeholder="任務名稱">
+                    <label class="inline-flex items-center gap-2">
+                        <input type="checkbox" id="task-confirm-input" class="h-4 w-4"> <span>已確認</span>
+                    </label>
+                    <button id="add-task-btn" class="px-3 py-2 bg-red-500 text-white rounded-md">新增任務</button>
+                </div>
+            </div>
+            <div class="table-container max-h-64 overflow-y-auto">
+                <table class="w-full text-sm text-left text-gray-500">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                        <tr>
+                            <th class="px-4 py-2">任務名稱</th>
+                            <th class="px-4 py-2">確認</th>
+                            <th class="px-4 py-2">照片</th>
+                            <th class="px-4 py-2 text-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tasks-list"></tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -721,6 +755,10 @@
  let patrolMap = null;
  let patrolPointMarkers = {};
  let patrolPointButtons = {};
+
+        // --- Tasks management context ---
+        let currentTasksContext = null; // { scheduleId, pointId }
+        let currentTaskPhotoContext = null; // { scheduleId, pointId, taskId }
 
 
         // --- 權限設定 ---
@@ -1242,6 +1280,12 @@
                     <td class="px-4 py-2 text-xs">${p.location}</td>
                     <td class="px-4 py-2 text-xs">${p.desc || ''}</td>
                     <td class="px-4 py-2">${p.requiresConfirm ? '是' : '否'}</td>
+                    <td class="px-4 py-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-600">${(p.tasks?.length || 0)} 項</span>
+                            <button class="manage-tasks-btn text-blue-600 hover:underline" data-id="${p.internalId}">管理</button>
+                        </div>
+                    </td>
                     <td class="px-4 py-2 font-mono text-xs">${p.nfcCode}</td>
                     <td class="px-4 py-2 text-right">
                         <button class="move-up-point-btn text-gray-600 hover:underline mr-2" data-id="${p.internalId}" ${idx===0 ? 'disabled' : ''}>上移</button>
@@ -1278,9 +1322,10 @@
 
             const existingPointIndex = updatedPoints.findIndex(p => p.internalId === newPoint.internalId);
             if (existingPointIndex > -1) {
-                updatedPoints[existingPointIndex] = newPoint; // Update
+                const existing = updatedPoints[existingPointIndex];
+                updatedPoints[existingPointIndex] = { ...existing, ...newPoint, tasks: Array.isArray(existing.tasks) ? existing.tasks : [] };
             } else {
-                updatedPoints.push(newPoint); // Add
+                updatedPoints.push({ ...newPoint, tasks: [] });
             }
 
             try {
@@ -2060,6 +2105,79 @@
                 renderPatrolPoints(currentScheduleForPoints);
             }
             
+            // --- Tasks Modal open ---
+            if (e.target.classList.contains('manage-tasks-btn')) {
+                const pointId = e.target.dataset.id;
+                const point = currentScheduleForPoints?.patrolPoints?.find(p => p.internalId === pointId);
+                if (!point) { alert('找不到巡邏點'); return; }
+                currentTasksContext = { scheduleId: currentScheduleForPoints.id, pointId };
+                const info = document.getElementById('tasks-point-info');
+                info.textContent = `巡邏點: ${point.code} (${point.name})`;
+                renderTasksList(point);
+                openModal(document.getElementById('tasks-modal'));
+            }
+            if (e.target.id === 'close-tasks-modal-btn') {
+                currentTasksContext = null;
+                closeModal(document.getElementById('tasks-modal'));
+            }
+            if (e.target.id === 'add-task-btn') {
+                const nameEl = document.getElementById('task-name-input');
+                const confirmEl = document.getElementById('task-confirm-input');
+                const name = (nameEl?.value || '').trim();
+                const confirmed = !!(confirmEl?.checked);
+                if (!currentTasksContext) { alert('請先選擇巡邏點'); return; }
+                if (!name) { alert('請輸入任務名稱'); return; }
+                const id = (crypto?.randomUUID ? crypto.randomUUID() : ('task_' + Date.now()));
+                await updateTasksForCurrentPoint(tasks => [...tasks, { id, name, confirmed: confirmed || false, photos: [] }]);
+                if (nameEl) nameEl.value = '';
+                if (confirmEl) confirmEl.checked = false;
+            }
+
+            // --- Task row actions ---
+            if (e.target.classList.contains('delete-task-btn')) {
+                const taskId = e.target.dataset.taskId;
+                await updateTasksForCurrentPoint(tasks => tasks.filter(t => t.id !== taskId));
+            }
+            if (e.target.classList.contains('toggle-task-confirm-btn')) {
+                const taskId = e.target.dataset.taskId;
+                await updateTasksForCurrentPoint(tasks => tasks.map(t => t.id === taskId ? { ...t, confirmed: !t.confirmed } : t));
+            }
+            if (e.target.classList.contains('task-take-photo-btn')) {
+                const taskId = e.target.dataset.taskId;
+                const point = getCurrentTasksPoint();
+                if (!point) { alert('找不到巡邏點'); return; }
+                currentTaskPhotoContext = { scheduleId: currentTasksContext.scheduleId, pointId: point.internalId, taskId };
+                const timestamp = new Date();
+                const scanLocation = point.location || null;
+                currentPhotoLogContext = { patrolPoint: point, timestamp, scanLocation, logId: null };
+                const modal = document.getElementById('photo-capture-modal');
+                openModal(modal);
+                await startCamera('environment');
+                const select = document.getElementById('camera-select');
+                select.value = 'environment';
+            }
+            if (e.target.classList.contains('task-view-photos-btn')) {
+                const taskId = e.target.dataset.taskId;
+                const point = getCurrentTasksPoint();
+                if (!point) { alert('找不到巡邏點'); return; }
+                const task = (Array.isArray(point.tasks) ? point.tasks : []).find(t => t.id === taskId);
+                const urls = Array.isArray(task?.photos) ? task.photos : [];
+                const modal = document.getElementById('photo-view-modal');
+                const grid = document.getElementById('photo-view-grid');
+                grid.innerHTML = '';
+                if (urls.length === 0) {
+                    grid.innerHTML = '<p class="text-gray-500">此任務尚無照片</p>';
+                } else {
+                    urls.forEach(u => {
+                        const img = document.createElement('img');
+                        img.src = u;
+                        img.className = 'w-full rounded-md border';
+                        grid.appendChild(img);
+                    });
+                }
+                openModal(modal);
+            }
+
             // GPS Buttons
             if (e.target.closest('.get-gps-btn')) {
                 const targetId = e.target.closest('.get-gps-btn').dataset.target;
@@ -2428,39 +2546,59 @@
             const modal = document.getElementById('photo-capture-modal');
             const items = Array.from(document.getElementById('captured-photos').children);
             if (items.length === 0) { closeModal(modal); return; }
-            // Create log if not yet created; we used savePatrolLog before photo.
-            // Attach photos directly to the created log using stored logId
             try {
-                const { logId } = currentPhotoLogContext || {};
-                if (!logId) { alert('找不到要附加照片的紀錄'); closeModal(modal); return; }
                 const uploadData = [];
                 const metadata = { contentType: 'image/png' };
-                for (let i=0;i<items.length;i++){
-                    const imgEl = items[i].querySelector('img');
-                    const noteEl = items[i].querySelector('input');
-                    const blob = await dataURLToBlob(imgEl.src);
-                    const path = `logs/${logId}/${Date.now()}_${i}.png`;
-                    const sref = storageRef(storage, path);
-                    try {
-                        await uploadBytes(sref, blob, metadata);
-                    } catch(upErr) {
-                        // 後援：直接以上傳 data URL 字串（避免某些環境 Blob 受限）
-                        await uploadString(sref, imgEl.src, 'data_url', metadata);
+                // If saving for task-specific context (no patrol log), upload under tasks path
+                if (currentTaskPhotoContext) {
+                    const { scheduleId, pointId, taskId } = currentTaskPhotoContext;
+                    for (let i=0;i<items.length;i++){
+                        const imgEl = items[i].querySelector('img');
+                        const noteEl = items[i].querySelector('input');
+                        const blob = await dataURLToBlob(imgEl.src);
+                        const path = `tasks/${scheduleId}/${pointId}/${taskId}/${Date.now()}_${i}.png`;
+                        const sref = storageRef(storage, path);
+                        try {
+                            await uploadBytes(sref, blob, metadata);
+                        } catch(upErr) {
+                            await uploadString(sref, imgEl.src, 'data_url', metadata);
+                        }
+                        const url = await getDownloadURL(sref);
+                        uploadData.push({ url, note: (noteEl?.value || '').trim() });
                     }
-                    const url = await getDownloadURL(sref);
-                    uploadData.push({ url, note: (noteEl?.value || '').trim() });
+                    const urls = uploadData.map(d => d.url);
+                    await updateTasksForCurrentPoint(tasks => tasks.map(t => t.id === taskId ? { ...t, photos: (t.photos || []).concat(urls) } : t));
+                    alert('任務照片已儲存');
+                    currentTaskPhotoContext = null;
+                } else {
+                    // Default: attach to patrol log created earlier
+                    const { logId } = currentPhotoLogContext || {};
+                    if (!logId) { alert('找不到要附加照片的紀錄'); closeModal(modal); return; }
+                    for (let i=0;i<items.length;i++){
+                        const imgEl = items[i].querySelector('img');
+                        const noteEl = items[i].querySelector('input');
+                        const blob = await dataURLToBlob(imgEl.src);
+                        const path = `logs/${logId}/${Date.now()}_${i}.png`;
+                        const sref = storageRef(storage, path);
+                        try {
+                            await uploadBytes(sref, blob, metadata);
+                        } catch(upErr) {
+                            // 後援：直接以上傳 data URL 字串（避免某些環境 Blob 受限）
+                            await uploadString(sref, imgEl.src, 'data_url', metadata);
+                        }
+                        const url = await getDownloadURL(sref);
+                        uploadData.push({ url, note: (noteEl?.value || '').trim() });
+                    }
+                    const urls = uploadData.map(d => d.url);
+                    const payload = { photos: arrayUnion(...urls), photoDetails: arrayUnion(...uploadData) };
+                    try {
+                        await updateDoc(doc(db,'patrol_logs', logId), payload);
+                    } catch(upErr){
+                        await setDoc(doc(db,'patrol_logs', logId), payload, { merge: true });
+                    }
+                    alert('照片已儲存');
                 }
-                // 將照片與備註一起寫入（保持舊結構兼容：若後續需要簡單 URL，仍可 map）
-                const urls = uploadData.map(d => d.url);
-                const payload = { photos: arrayUnion(...urls), photoDetails: arrayUnion(...uploadData) };
-                try {
-                    await updateDoc(doc(db,'patrol_logs', logId), payload);
-                } catch(upErr){
-                    // If the document somehow doesn't exist or update fails, fallback to set with merge
-                    await setDoc(doc(db,'patrol_logs', logId), payload, { merge: true });
-                }
-                alert('照片已儲存');
-                // Stop camera
+                // Stop camera and clean up
                 const video = document.getElementById('camera-stream');
                 if (video && video.srcObject) {
                     video.srcObject.getTracks().forEach(t => t.stop());
@@ -2491,6 +2629,52 @@
                 result += chars.charAt(Math.floor(Math.random() * chars.length));
             }
             return result;
+        }
+
+        // --- Tasks helpers ---
+        function getCurrentTasksPoint(){
+            if (!currentTasksContext) return null;
+            return currentScheduleForPoints?.patrolPoints?.find(p => p.internalId === currentTasksContext.pointId) || null;
+        }
+        async function updateTasksForCurrentPoint(updater){
+            const point = getCurrentTasksPoint();
+            if (!point) return;
+            const points = [...(currentScheduleForPoints.patrolPoints || [])];
+            const idx = points.findIndex(p => p.internalId === point.internalId);
+            const prevTasks = Array.isArray(point.tasks) ? point.tasks : [];
+            const nextTasks = updater(prevTasks);
+            points[idx] = { ...point, tasks: nextTasks };
+            const scheduleRef = doc(db, 'schedules', currentScheduleForPoints.id);
+            await updateDoc(scheduleRef, { patrolPoints: points });
+            currentScheduleForPoints.patrolPoints = points;
+            renderTasksList(points[idx]);
+            renderPatrolPoints(currentScheduleForPoints);
+        }
+        function renderTasksList(point){
+            const listEl = document.getElementById('tasks-list');
+            listEl.innerHTML = '';
+            const tasks = Array.isArray(point.tasks) ? point.tasks : [];
+            if (tasks.length === 0) {
+                listEl.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">尚無任務</td></tr>`;
+                return;
+            }
+            tasks.forEach(task => {
+                const tr = document.createElement('tr');
+                tr.className = 'bg-white border-b';
+                tr.innerHTML = `
+                    <td class="px-4 py-2">${task.name || ''}</td>
+                    <td class="px-4 py-2">${task.confirmed ? '<span class="text-green-600">已確認</span>' : '<span class="text-gray-600">未確認</span>'}</td>
+                    <td class="px-4 py-2 text-xs">${Array.isArray(task.photos) ? task.photos.length : 0} 張
+                        ${Array.isArray(task.photos) && task.photos.length > 0 ? `<button class="task-view-photos-btn text-purple-600 hover:underline ml-2" data-task-id="${task.id}">查看</button>` : ''}
+                    </td>
+                    <td class="px-4 py-2 text-right">
+                        <button class="toggle-task-confirm-btn text-blue-600 hover:underline mr-2" data-task-id="${task.id}">${task.confirmed ? '改為未確認' : '設為已確認'}</button>
+                        <button class="task-take-photo-btn text-green-600 hover:underline mr-2" data-task-id="${task.id}">拍照</button>
+                        <button class="delete-task-btn text-red-600 hover:underline" data-task-id="${task.id}">刪除</button>
+                    </td>
+                `;
+                listEl.appendChild(tr);
+            });
         }
 
         function calculateDistance(coords1Str, coords2Str) {
