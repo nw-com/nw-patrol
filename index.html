@@ -725,6 +725,8 @@
             auth = getAuth(app);
             db = getFirestore(app);
             storage = getStorage(app);
+            // 若部署在 GitHub Pages，預設啟用 Data URL 備援保存以避免未配置 CORS 前無法上傳
+            window.FORCE_DATAURL_SAVE = (typeof location !== 'undefined' && /github\.io$/i.test(location.hostname));
             document.getElementById('firebase-status').textContent = '已連接';
             document.getElementById('firebase-status').className = 'text-green-600';
         } catch(e) {
@@ -2998,34 +3000,65 @@
                 } else {
                     // Default: attach to patrol log created earlier
                     if (!logId) { alert('找不到要附加照片的紀錄'); closeModal(modal); return; }
+                    // 若在 GitHub Pages 或指定環境，強制以 Data URL 直接保存到 Firestore（避免 Storage CORS）
+                    if (window.FORCE_DATAURL_SAVE) {
+                        const dataUrls = items.map(it => it.querySelector('img')?.src).filter(Boolean);
+                        const payload = { photoDataUrls: arrayUnion(...dataUrls) };
+                        try {
+                            await updateDoc(doc(db,'patrol_logs', logId), payload);
+                        } catch(upErr){
+                            await setDoc(doc(db,'patrol_logs', logId), payload, { merge: true });
+                        }
+                        alert('已以備援方式保存照片（Data URL）。配置 Storage CORS 後會改用雲端儲存。');
+                    } else {
+                    const details = [];
+                    const urls = [];
+                    const fallbackDataUrls = [];
                     for (let i=0;i<items.length;i++){
                         const imgEl = items[i].querySelector('img');
                         const noteEl = items[i].querySelector('input');
-                        const blob = await dataURLToBlob(imgEl.src);
-                        const path = `logs/${logId}/${Date.now()}_${i}.png`;
-                        const sref = storageRef(storage, path);
+                        const dataUrl = imgEl?.src;
+                        const note = (noteEl?.value || '').trim();
                         try {
-                            await uploadBytes(sref, blob, metadata);
-                        } catch(upErr) {
-                            // 後援：直接以上傳 data URL 字串（避免某些環境 Blob 受限）
-                            await uploadString(sref, imgEl.src, 'data_url', metadata);
+                            const blob = await dataURLToBlob(dataUrl);
+                            const path = `logs/${logId}/${Date.now()}_${i}.png`;
+                            const sref = storageRef(storage, path);
+                            try {
+                                await uploadBytes(sref, blob, metadata);
+                            } catch(upErr) {
+                                // 後援：直接以上傳 data URL 字串（避免某些環境 Blob 受限）
+                                await uploadString(sref, dataUrl, 'data_url', metadata);
+                            }
+                            const url = await getDownloadURL(sref);
+                            urls.push(url);
+                            details.push({ url, note });
+                        } catch (e) {
+                            console.warn('單張照片上傳失敗，改以 Data URL 備援', e);
+                            if (dataUrl) fallbackDataUrls.push(dataUrl);
                         }
-                        const url = await getDownloadURL(sref);
-                        uploadData.push({ url, note: (noteEl?.value || '').trim() });
                     }
-                    const urls = uploadData.map(d => d.url);
-                    let payload = { photos: arrayUnion(...urls), photoDetails: arrayUnion(...uploadData) };
-                    // 若取得下載URL失敗（CORS 或網路），以 data URL 作為備援，確保可視與完成判定
-                    if (urls.length === 0) {
-                        const dataUrls = items.map(it => it.querySelector('img')?.src).filter(Boolean);
-                        payload = { photoDataUrls: arrayUnion(...dataUrls) };
+                    const payload = {};
+                    if (urls.length > 0) {
+                        payload.photos = arrayUnion(...urls);
+                        payload.photoDetails = arrayUnion(...details);
+                    }
+                    if (fallbackDataUrls.length > 0) {
+                        payload.photoDataUrls = arrayUnion(...fallbackDataUrls);
+                    }
+                    if (Object.keys(payload).length === 0) {
+                        throw new Error('所有照片均無法保存（可能為 CORS 或網路問題）');
                     }
                     try {
                         await updateDoc(doc(db,'patrol_logs', logId), payload);
                     } catch(upErr){
                         await setDoc(doc(db,'patrol_logs', logId), payload, { merge: true });
                     }
-                    alert('照片已儲存');
+                    if (fallbackDataUrls.length > 0 && urls.length === 0) {
+                        alert('因 CORS/網路問題，照片以備援方式保存，仍可檢視與判定完成。');
+                    } else {
+                        alert('照片已儲存');
+                    }
+                    }
                 }
                 // Stop camera and clean up
                 const video = document.getElementById('camera-stream');
