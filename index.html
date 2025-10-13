@@ -2644,6 +2644,15 @@
         async function startQRScan(targetPoint){
             qrScanLog.innerHTML = '';
             document.getElementById('qr-scan-point-name').textContent = `掃描: ${targetPoint.name}`;
+            // 巡邏時段規則：未到開始時間禁止掃描
+            try {
+                const { start } = getTodayScheduleWindow(activePatrol || {});
+                const now = new Date();
+                if (start && now < start) {
+                    qrLog("<span class='text-red-500'>尚未到設定開始時間，無法打卡。</span>");
+                    return;
+                }
+            } catch(e){}
             openModal(qrScanModal);
             // 優先使用 BarcodeDetector
             try {
@@ -2800,6 +2809,8 @@
         // --- Photo capture & watermark ---
         let currentPhotoLogContext = null;
         async function openPhotoCapture(patrolPoint, timestamp, scanLocation, logId){
+            // 巡邏模式拍照：確保不會誤用任務拍照上下文
+            currentTaskPhotoContext = null;
             currentPhotoLogContext = { patrolPoint, timestamp, scanLocation, logId };
             const modal = document.getElementById('photo-capture-modal');
             openModal(modal);
@@ -2916,7 +2927,9 @@
                 const uploadData = [];
                 const metadata = { contentType: 'image/png' };
                 // If saving for task-specific context (no patrol log), upload under tasks path
-                if (currentTaskPhotoContext) {
+                // 優先使用巡邏紀錄（logId）以避免殘留的任務上下文造成錯誤
+                const { logId } = currentPhotoLogContext || {};
+                if (!logId && currentTaskPhotoContext) {
                     const { scheduleId, pointId, taskId } = currentTaskPhotoContext;
                     for (let i=0;i<items.length;i++){
                         const imgEl = items[i].querySelector('img');
@@ -2938,7 +2951,6 @@
                     currentTaskPhotoContext = null;
                 } else {
                     // Default: attach to patrol log created earlier
-                    const { logId } = currentPhotoLogContext || {};
                     if (!logId) { alert('找不到要附加照片的紀錄'); closeModal(modal); return; }
                     for (let i=0;i<items.length;i++){
                         const imgEl = items[i].querySelector('img');
@@ -2984,6 +2996,9 @@
                 video.srcObject.getTracks().forEach(t => t.stop());
             }
             document.getElementById('captured-photos').innerHTML = '';
+            // 重置上下文，避免殘留影響下次保存
+            currentPhotoLogContext = null;
+            currentTaskPhotoContext = null;
             closeModal(modal);
         });
         
