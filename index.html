@@ -838,7 +838,26 @@
             if (!containerEl) { alert('找不到可匯出的內容'); return; }
             const { jsPDF } = window.jspdf || {};
             if (!jsPDF || !window.html2canvas) { alert('PDF 函式庫未載入'); return; }
-            window.html2canvas(containerEl, { scale: 2 }).then(canvas => {
+
+            // 暫時隱藏可能造成污染的全域相機影片節點
+            const cameraEl = document.getElementById('camera-stream');
+            const prevDisplay = cameraEl ? cameraEl.style.display : undefined;
+            if (cameraEl) cameraEl.style.display = 'none';
+
+            const options = {
+                scale: 2,
+                useCORS: true,
+                allowTaint: false,
+                backgroundColor: '#ffffff',
+                logging: false,
+                // 忽略可能跨來源污染的媒體元素
+                ignoreElements: (el) => {
+                    const tag = el && el.tagName ? el.tagName.toUpperCase() : '';
+                    return tag === 'VIDEO' || tag === 'IFRAME' || tag === 'CANVAS' || el.id === 'camera-stream';
+                }
+            };
+
+            window.html2canvas(containerEl, options).then(canvas => {
                 const imgData = canvas.toDataURL('image/png');
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const pageWidth = pdf.internal.pageSize.getWidth();
@@ -856,7 +875,13 @@
                     heightLeft -= pageHeight;
                 }
                 pdf.save(fileName || '巡邏紀錄.pdf');
-            }).catch(() => alert('匯出PDF失敗'));
+            }).catch((err) => {
+                console.error('PDF 匯出錯誤：', err);
+                const msg = (err && err.message) ? err.message : '可能因跨來源圖片/影片或瀏覽器限制造成失敗。請嘗試：1) 先關閉相機視窗；2) 確認圖片來源允許 CORS；3) 重新整理後重試。';
+                alert('匯出PDF失敗：' + msg);
+            }).finally(() => {
+                if (cameraEl) cameraEl.style.display = prevDisplay || '';
+            });
         }
 
 
