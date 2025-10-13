@@ -7,6 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- PDF & HTML Capture Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
         /* 全局樣式和字體 */
         body {
@@ -189,12 +192,25 @@
                                 <button id="data-apply-filters-btn" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm">查詢紀錄</button>
                             </div>
                         </div>
+                        <!-- Actions (Print / Export) -->
+                        <div id="data-actions" class="mb-4 flex gap-2 print-hide">
+                            <div id="daily-actions" class="flex gap-2">
+                                <button id="daily-print-btn" class="px-3 py-2 bg-gray-200 text-gray-800 rounded-md text-sm">列印每日</button>
+                                <button id="daily-export-pdf-btn" class="px-3 py-2 bg-blue-500 text-white rounded-md text-sm">匯出PDF</button>
+                            </div>
+                            <div id="monthly-actions" class="flex gap-2 hidden">
+                                <button id="monthly-print-btn" class="px-3 py-2 bg-gray-200 text-gray-800 rounded-md text-sm">列印每月</button>
+                                <button id="monthly-export-pdf-btn" class="px-3 py-2 bg-blue-500 text-white rounded-md text-sm">匯出PDF</button>
+                            </div>
+                        </div>
                         <div id="data-logs-container" class="space-y-4">
                             <!-- Daily log summaries will be loaded here -->
                         </div>
+                        <div id="daily-pagination" class="mt-2 print-hide"></div>
                         <div id="data-monthly-container" class="space-y-4 hidden">
                             <!-- Monthly view will be rendered here -->
                         </div>
+                        <div id="monthly-pagination" class="mt-2 print-hide hidden"></div>
                     </div>
 
                     <div id="page-schedule" class="page-content hidden space-y-6">
@@ -759,6 +775,54 @@
         // --- Tasks management context ---
         let currentTasksContext = null; // { scheduleId, pointId }
         let currentTaskPhotoContext = null; // { scheduleId, pointId, taskId }
+
+        // --- 資料頁面分頁狀態 ---
+        const dailyPaginationState = { items: [], pageSize: 8, currentPage: 1 };
+        const monthlyPaginationState = { rows: [], pageSize: 12, currentPage: 1 };
+
+        function renderPaginationControls(containerId, state, onPageChange) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            const totalPages = Math.max(1, Math.ceil((state.items?.length || state.rows?.length || 0) / state.pageSize));
+            const cp = Math.min(state.currentPage, totalPages);
+            state.currentPage = cp;
+            container.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <button id="${containerId}-prev" class="px-3 py-1 rounded bg-gray-200 text-gray-800" ${cp<=1?'disabled':''}>上一頁</button>
+                    <span class="text-sm text-gray-600">第 ${cp} / ${totalPages} 頁</span>
+                    <button id="${containerId}-next" class="px-3 py-1 rounded bg-gray-200 text-gray-800" ${cp>=totalPages?'disabled':''}>下一頁</button>
+                </div>
+            `;
+            const prevBtn = document.getElementById(`${containerId}-prev`);
+            const nextBtn = document.getElementById(`${containerId}-next`);
+            if (prevBtn) prevBtn.onclick = () => { if (state.currentPage>1){ state.currentPage--; onPageChange(); } };
+            if (nextBtn) nextBtn.onclick = () => { const total = Math.ceil((state.items?.length || state.rows?.length || 0)/state.pageSize); if (state.currentPage<total){ state.currentPage++; onPageChange(); } };
+        }
+
+        function exportContainerToPDF(containerEl, fileName) {
+            if (!containerEl) { alert('找不到可匯出的內容'); return; }
+            const { jsPDF } = window.jspdf || {};
+            if (!jsPDF || !window.html2canvas) { alert('PDF 函式庫未載入'); return; }
+            window.html2canvas(containerEl, { scale: 2 }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                const imgWidth = pageWidth;
+                const imgHeight = canvas.height * imgWidth / canvas.width;
+                let heightLeft = imgHeight;
+                let position = 0;
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+                while (heightLeft > 0) {
+                    pdf.addPage();
+                    position = heightLeft - imgHeight;
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+                pdf.save(fileName || '巡邏紀錄.pdf');
+            }).catch(() => alert('匯出PDF失敗'));
+        }
 
 
         // --- 權限設定 ---
@@ -1493,8 +1557,16 @@
             document.getElementById('data-logs-container').classList.toggle('hidden', !!isMonthly);
             const monthlyEl = document.getElementById('data-monthly-container');
             if (monthlyEl) monthlyEl.classList.toggle('hidden', !isMonthly);
+            const dailyActions = document.getElementById('daily-actions');
+            const monthlyActions = document.getElementById('monthly-actions');
+            if (dailyActions) dailyActions.classList.toggle('hidden', !!isMonthly);
+            if (monthlyActions) monthlyActions.classList.toggle('hidden', !isMonthly);
             const monthlyPrintBtn = document.getElementById('monthly-print-btn');
             if (monthlyPrintBtn) monthlyPrintBtn.classList.toggle('hidden', !isMonthly);
+            const dailyPagination = document.getElementById('daily-pagination');
+            const monthlyPagination = document.getElementById('monthly-pagination');
+            if (dailyPagination) dailyPagination.classList.toggle('hidden', !!isMonthly);
+            if (monthlyPagination) monthlyPagination.classList.toggle('hidden', !isMonthly);
 
             // 1. Get relevant schedules for the selected period
             let scheduleConstraints = [];
@@ -1597,34 +1669,38 @@
                     return acc;
                 }, {});
 
-                // 4. Render schedule blocks
-                dataLogsContainer.innerHTML = '';
-                relevantSchedules.forEach(schedule => {
-                    const logsForThisSchedule = logsBySchedule[schedule.id] || [];
-                    const totalPoints = schedule.patrolPoints?.length || 0;
-                    const completedPoints = new Set(logsForThisSchedule.map(l => l.patrolPointId)).size;
-
-                    const card = document.createElement('div');
-                    card.className = 'p-4 bg-white rounded-lg shadow border border-gray-200 cursor-pointer hover:bg-gray-50';
-                    card.innerHTML = `
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <p class="font-bold text-lg text-gray-800">${schedule.communityName}</p>
-                                <p class="text-sm text-gray-500">${schedule.patrolCode} (${schedule.userName})</p>
+                // 4. Render schedule blocks with pagination
+                dailyPaginationState.items = relevantSchedules.map(s => ({ schedule: s, logs: logsBySchedule[s.id] || [] }));
+                dailyPaginationState.currentPage = 1;
+                const renderDailyPage = () => {
+                    dataLogsContainer.innerHTML = '';
+                    const start = (dailyPaginationState.currentPage - 1) * dailyPaginationState.pageSize;
+                    const end = start + dailyPaginationState.pageSize;
+                    dailyPaginationState.items.slice(start, end).forEach(({ schedule, logs }) => {
+                        const totalPoints = schedule.patrolPoints?.length || 0;
+                        const completedPoints = new Set((logs||[]).map(l => l.patrolPointId)).size;
+                        const card = document.createElement('div');
+                        card.className = 'p-4 bg-white rounded-lg shadow border border-gray-200 cursor-pointer hover:bg-gray-50';
+                        card.innerHTML = `
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <p class="font-bold text-lg text-gray-800">${schedule.communityName}</p>
+                                    <p class="text-sm text-gray-500">${schedule.patrolCode} (${schedule.userName})</p>
+                                </div>
+                                <div class="text-right">
+                                 <p class="font-semibold text-lg">${completedPoints} / ${totalPoints}</p>
+                                 <p class="text-xs text-gray-500">已完成/總數</p>
+                                </div>
                             </div>
-                            <div class="text-right">
-                             <p class="font-semibold text-lg">${completedPoints} / ${totalPoints}</p>
-                             <p class="text-xs text-gray-500">已完成/總數</p>
-                            </div>
-                        </div>
-                    `;
-                    card.addEventListener('click', () => {
-                        renderLogDetailsModal(schedule, logsForThisSchedule);
+                        `;
+                        card.addEventListener('click', () => renderLogDetailsModal(schedule, logs||[]));
+                        dataLogsContainer.appendChild(card);
                     });
-                    dataLogsContainer.appendChild(card);
-                });
+                };
+                renderDailyPage();
+                renderPaginationControls('daily-pagination', dailyPaginationState, renderDailyPage);
             } else {
-                // Monthly aggregation to table
+                // Monthly aggregation with pagination
                 const month = selectedDate;
                 const daysInMonth = new Date(month.getFullYear(), month.getMonth()+1, 0).getDate();
                 const countsByDay = Array(daysInMonth).fill(0);
@@ -1635,48 +1711,66 @@
                 const monthlyContainer = document.getElementById('data-monthly-container');
                 if (monthlyContainer) {
                     monthlyContainer.innerHTML = '';
-                    const table = document.createElement('table');
-                    table.className = 'min-w-full divide-y divide-gray-200';
-                    table.innerHTML = `
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">社區</th>
-                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">日期</th>
-                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">紀錄筆數</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200"></tbody>
-                    `;
-                    const tbody = table.querySelector('tbody');
                     const communityName = (selectedDayLogs[0] && selectedDayLogs[0].communityName) || '—';
-                    let monthTotal = 0;
-                    for (let d = 1; d <= daysInMonth; d++) {
-                        const tr = document.createElement('tr');
-                        tr.classList.add('hover:bg-gray-50','cursor-pointer');
-                        const dateStr = `${month.getFullYear()}-${String(month.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                        tr.innerHTML = `
-                            <td class="px-4 py-2">${communityName}</td>
-                            <td class="px-4 py-2">${dateStr}</td>
-                            <td class="px-4 py-2">${countsByDay[d-1]}</td>
+                    let monthTotal = countsByDay.reduce((a,b)=>a+b,0);
+                    monthlyPaginationState.rows = Array.from({length: daysInMonth}, (_, i) => {
+                        const d = i+1;
+                        return {
+                            communityName,
+                            dateStr: `${month.getFullYear()}-${String(month.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
+                            count: countsByDay[i]
+                        };
+                    });
+                    monthlyPaginationState.currentPage = 1;
+                    const renderMonthlyPage = () => {
+                        monthlyContainer.innerHTML = '';
+                        const table = document.createElement('table');
+                        table.className = 'min-w-full divide-y divide-gray-200';
+                        table.innerHTML = `
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">社區</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">日期</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-700">紀錄筆數</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200"></tbody>
                         `;
-                        tr.addEventListener('click', () => {
-                            const dateInput = document.getElementById('data-filter-date');
-                            if (dateInput) dateInput.value = dateStr;
-                            const dailyBtn = document.getElementById('tab-daily');
-                            if (dailyBtn) dailyBtn.click();
+                        const tbody = table.querySelector('tbody');
+                        const start = (monthlyPaginationState.currentPage - 1) * monthlyPaginationState.pageSize;
+                        const end = start + monthlyPaginationState.pageSize;
+                        monthlyPaginationState.rows.slice(start, end).forEach(row => {
+                            const tr = document.createElement('tr');
+                            tr.classList.add('hover:bg-gray-50','cursor-pointer');
+                            tr.innerHTML = `
+                                <td class="px-4 py-2">${row.communityName}</td>
+                                <td class="px-4 py-2">${row.dateStr}</td>
+                                <td class="px-4 py-2">${row.count}</td>
+                            `;
+                            tr.addEventListener('click', () => {
+                                const dateInput = document.getElementById('data-filter-date');
+                                if (dateInput) dateInput.value = row.dateStr;
+                                const dailyBtn = document.getElementById('tab-daily');
+                                if (dailyBtn) dailyBtn.click();
+                            });
+                            tbody.appendChild(tr);
                         });
-                        tbody.appendChild(tr);
-                        monthTotal += countsByDay[d-1];
-                    }
-                    const totalTr = document.createElement('tr');
-                    totalTr.classList.add('bg-gray-100','font-semibold');
-                    totalTr.innerHTML = `
-                        <td class="px-4 py-2">${communityName}</td>
-                        <td class="px-4 py-2">合計</td>
-                        <td class="px-4 py-2">${monthTotal}</td>
-                    `;
-                    tbody.appendChild(totalTr);
-                    monthlyContainer.appendChild(table);
+                        // 合計列只在最後一頁顯示
+                        const totalPages = Math.ceil(monthlyPaginationState.rows.length / monthlyPaginationState.pageSize);
+                        if (monthlyPaginationState.currentPage === totalPages) {
+                            const totalTr = document.createElement('tr');
+                            totalTr.classList.add('bg-gray-100','font-semibold');
+                            totalTr.innerHTML = `
+                                <td class="px-4 py-2">${communityName}</td>
+                                <td class="px-4 py-2">合計</td>
+                                <td class="px-4 py-2">${monthTotal}</td>
+                            `;
+                            tbody.appendChild(totalTr);
+                        }
+                        monthlyContainer.appendChild(table);
+                    };
+                    renderMonthlyPage();
+                    renderPaginationControls('monthly-pagination', { ...monthlyPaginationState, items: undefined }, renderMonthlyPage);
                 }
             }
         }
@@ -1718,6 +1812,16 @@
                 loadAndRenderDataPage();
             }
         });
+
+        // 列印與匯出動作
+        const dailyPrintBtnEl = document.getElementById('daily-print-btn');
+        const monthlyPrintBtnEl = document.getElementById('monthly-print-btn');
+        const dailyExportBtnEl = document.getElementById('daily-export-pdf-btn');
+        const monthlyExportBtnEl = document.getElementById('monthly-export-pdf-btn');
+        if (dailyPrintBtnEl) dailyPrintBtnEl.addEventListener('click', () => window.print());
+        if (monthlyPrintBtnEl) monthlyPrintBtnEl.addEventListener('click', () => window.print());
+        if (dailyExportBtnEl) dailyExportBtnEl.addEventListener('click', () => exportContainerToPDF(document.getElementById('data-logs-container'), '每日巡邏紀錄.pdf'));
+        if (monthlyExportBtnEl) monthlyExportBtnEl.addEventListener('click', () => exportContainerToPDF(document.getElementById('data-monthly-container'), '每月巡邏紀錄.pdf'));
 
         function renderLogDetailsModal(schedule, logs) {
             const modalTitle = document.getElementById('log-details-modal-title');
