@@ -2083,11 +2083,23 @@
                 await openManualLogModal(scheduleId, pointId, logId);
             }
             if (e.target.classList.contains('delete-log-btn')) {
-                const logId = e.target.dataset.logId;
+                const btn = e.target;
+                const logId = btn.dataset.logId;
                 if (confirm('確定要刪除這筆紀錄嗎？')) {
-                    await deleteDoc(doc(db, 'patrol_logs', logId));
-                    loadAndRenderDataPage(); // Refresh data page
-                    closeModal(logDetailsModal);
+                    const row = btn.closest('tr');
+                    if (row) row.remove();
+                    btn.disabled = true;
+                    btn.textContent = '刪除中…';
+                    try {
+                        await deleteDoc(doc(db, 'patrol_logs', logId));
+                        loadAndRenderDataPage();
+                        closeModal(logDetailsModal);
+                    } catch (err) {
+                        alert('刪除失敗：' + (err?.message || '未知錯誤'));
+                        btn.disabled = false;
+                        btn.textContent = '刪除';
+                        loadAndRenderDataPage();
+                    }
                 }
             }
 
