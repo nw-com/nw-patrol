@@ -2986,7 +2986,12 @@
                 closeModal(modal);
             } catch(err){
                 console.error(err);
-                alert('儲存照片失敗');
+                let msg = '儲存照片失敗';
+                const text = (err && (err.message || String(err))).toLowerCase();
+                if (text.includes('cors') || text.includes('blocked by cors') || text.includes('http ok status') || text.includes('err_failed')) {
+                    msg += '\n可能是 Firebase Storage CORS 設定不足或網路受限。\n請在專案的 Storage Bucket 設定 CORS，允許 https://nw-com.github.io 與 localhost。';
+                }
+                alert(msg);
             }
         });
 
