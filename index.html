@@ -60,12 +60,14 @@
         
     </style>
         <style>
-            /* 僅列印 print-area，隱藏其他內容 */
+            /* 列印專用：只顯示 .print-area 內容 */
             @media print {
                 body * { visibility: hidden !important; }
-                #print-area, #print-area * { visibility: visible !important; }
-                #print-area { position: absolute; left: 0; top: 0; width: 100%; }
+                .print-area, .print-area * { visibility: visible !important; }
+                .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+                .screen-hide { display: block !important; }
             }
+            @media screen { .screen-hide { display: none !important; } }
         </style>
     </head>
 <body class="bg-gray-100">
@@ -219,6 +221,8 @@
                             <!-- Monthly view will be rendered here -->
                         </div>
                         <div id="monthly-pagination" class="mt-2 print-hide hidden"></div>
+                        <!-- Data page printing container (hidden on screen, used for print/PDF) -->
+                        <div id="data-print-area" class="print-area screen-hide"></div>
                     </div>
 
                     <div id="page-schedule" class="page-content hidden space-y-6">
@@ -1837,11 +1841,11 @@
         const monthlyExportBtnEl = document.getElementById('monthly-export-pdf-btn');
         if (dailyPrintBtnEl) dailyPrintBtnEl.addEventListener('click', () => { buildDailyPrintArea(); window.print(); });
         if (monthlyPrintBtnEl) monthlyPrintBtnEl.addEventListener('click', () => { buildMonthlyPrintArea(); window.print(); });
-        if (dailyExportBtnEl) dailyExportBtnEl.addEventListener('click', () => { buildDailyPrintArea(); exportContainerToPDF(document.getElementById('print-area'), '每日巡邏紀錄.pdf'); });
-        if (monthlyExportBtnEl) monthlyExportBtnEl.addEventListener('click', () => { buildMonthlyPrintArea(); exportContainerToPDF(document.getElementById('print-area'), '每月巡邏紀錄.pdf'); });
+        if (dailyExportBtnEl) dailyExportBtnEl.addEventListener('click', () => { buildDailyPrintArea(); exportContainerToPDF(document.getElementById('data-print-area'), '每日巡邏紀錄.pdf'); });
+        if (monthlyExportBtnEl) monthlyExportBtnEl.addEventListener('click', () => { buildMonthlyPrintArea(); exportContainerToPDF(document.getElementById('data-print-area'), '每月巡邏紀錄.pdf'); });
 
         function buildPrintAreaTable(rows, title, dateStr) {
-            const area = document.getElementById('print-area');
+            const area = document.getElementById('data-print-area');
             if (!area) return;
             const safeDate = dateStr || '';
             const headerHtml = `
