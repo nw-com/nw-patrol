@@ -847,7 +847,8 @@
             if (cameraEl) cameraEl.style.display = 'none';
 
             const options = {
-                scale: 2,
+                // 依裝置像素比動態調整，避免過大造成影像過重
+                scale: Math.min(2, (window.devicePixelRatio || 1)),
                 useCORS: true,
                 allowTaint: false,
                 backgroundColor: '#ffffff',
@@ -860,23 +861,35 @@
             };
 
             window.html2canvas(containerEl, options).then(canvas => {
-                const imgData = canvas.toDataURL('image/png');
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const pageWidth = pdf.internal.pageSize.getWidth();
-                const pageHeight = pdf.internal.pageSize.getHeight();
-                const imgWidth = pageWidth;
-                const imgHeight = canvas.height * imgWidth / canvas.width;
-                let heightLeft = imgHeight;
-                let position = 0;
-                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
-                while (heightLeft > 0) {
-                    pdf.addPage();
-                    position = heightLeft - imgHeight;
-                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                const buildAndSavePdf = (format) => {
+                    const pdf = new jsPDF('p', 'mm', 'a4');
+                    const pageWidth = pdf.internal.pageSize.getWidth();
+                    const pageHeight = pdf.internal.pageSize.getHeight();
+                    const imgWidth = pageWidth;
+                    const imgHeight = canvas.height * imgWidth / canvas.width;
+                    let heightLeft = imgHeight;
+                    let position = 0;
+                    const imgData = format === 'PNG'
+                        ? canvas.toDataURL('image/png')
+                        : canvas.toDataURL('image/jpeg', 0.85);
+                    pdf.addImage(imgData, format, 0, position, imgWidth, imgHeight);
                     heightLeft -= pageHeight;
+                    while (heightLeft > 0) {
+                        pdf.addPage();
+                        position = heightLeft - imgHeight;
+                        pdf.addImage(imgData, format, 0, position, imgWidth, imgHeight);
+                        heightLeft -= pageHeight;
+                    }
+                    pdf.save(fileName || '巡邏紀錄.pdf');
+                };
+
+                try {
+                    // 先嘗試 PNG，若解析失敗再轉為 JPEG 匯出
+                    buildAndSavePdf('PNG');
+                } catch (pngErr) {
+                    console.warn('PNG 解析失敗，改用 JPEG 匯出：', pngErr);
+                    buildAndSavePdf('JPEG');
                 }
-                pdf.save(fileName || '巡邏紀錄.pdf');
             }).catch((err) => {
                 console.error('PDF 匯出錯誤：', err);
                 const msg = (err && err.message) ? err.message : '可能因跨來源圖片/影片或瀏覽器限制造成失敗。請嘗試：1) 先關閉相機視窗；2) 確認圖片來源允許 CORS；3) 重新整理後重試。';
