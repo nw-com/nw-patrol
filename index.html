@@ -1743,7 +1743,13 @@
                     const end = start + dailyPaginationState.pageSize;
                     dailyPaginationState.items.slice(start, end).forEach(({ schedule, logs }) => {
                         const totalPoints = schedule.patrolPoints?.length || 0;
-                        const completedPoints = new Set((logs||[]).map(l => l.patrolPointId)).size;
+                        const completedPoints = new Set(
+                            (logs||[])
+                              .filter(l => (Array.isArray(l.photos) && l.photos.length > 0)
+                                || (Array.isArray(l.photoDetails) && l.photoDetails.length > 0)
+                                || (Array.isArray(l.photoDataUrls) && l.photoDataUrls.length > 0))
+                              .map(l => l.patrolPointId)
+                        ).size;
                         const card = document.createElement('div');
                         card.className = 'p-4 bg-white rounded-lg shadow border border-gray-200 cursor-pointer hover:bg-gray-50';
                         card.innerHTML = `
@@ -1951,7 +1957,11 @@
             const start = (dailyPaginationState.currentPage - 1) * dailyPaginationState.pageSize;
             const end = start + dailyPaginationState.pageSize;
             const pageItems = (dailyPaginationState.items || []).slice(start, end);
-            const logs = pageItems.flatMap(({ logs }) => logs || []);
+            const logs = pageItems
+                .flatMap(({ logs }) => logs || [])
+                .filter(l => (Array.isArray(l.photos) && l.photos.length > 0)
+                    || (Array.isArray(l.photoDetails) && l.photoDetails.length > 0)
+                    || (Array.isArray(l.photoDataUrls) && l.photoDataUrls.length > 0));
             buildPrintAreaTable(logs, '每日巡邏紀錄', currentDataSelectedDateStr);
         }
 
@@ -1990,7 +2000,13 @@
             }
             
             allPoints.forEach(point => {
-                const log = logs.find(l => l.patrolPointId === point.internalId);
+                const log = (logs||[]).find(l => {
+                    if (l.patrolPointId !== point.internalId) return false;
+                    const hasPhotos = (Array.isArray(l.photos) && l.photos.length > 0)
+                        || (Array.isArray(l.photoDetails) && l.photoDetails.length > 0)
+                        || (Array.isArray(l.photoDataUrls) && l.photoDataUrls.length > 0);
+                    return hasPhotos;
+                });
                 const row = document.createElement('tr');
                 row.dataset.scheduleId = schedule.id;
                 row.dataset.pointId = point.internalId;
@@ -2092,10 +2108,11 @@
                     const data = logSnap.data();
                     const urls = Array.isArray(data.photos) ? data.photos : [];
                     const details = Array.isArray(data.photoDetails) ? data.photoDetails : [];
+                    const dataUrls = Array.isArray(data.photoDataUrls) ? data.photoDataUrls : [];
                     const modal = document.getElementById('photo-view-modal');
                     const grid = document.getElementById('photo-view-grid');
                     grid.innerHTML = '';
-                    if (urls.length === 0 && details.length === 0) {
+                    if (urls.length === 0 && details.length === 0 && dataUrls.length === 0) {
                         grid.innerHTML = '<p class="text-gray-500">此紀錄尚無照片</p>';
                     } else {
                         if (details.length > 0) {
@@ -2112,8 +2129,15 @@
                                 wrap.appendChild(note);
                                 grid.appendChild(wrap);
                             });
-                        } else {
+                        } else if (urls.length > 0) {
                             urls.forEach(u => {
+                                const img = document.createElement('img');
+                                img.src = u;
+                                img.className = 'w-full rounded-md border';
+                                grid.appendChild(img);
+                            });
+                        } else if (dataUrls.length > 0) {
+                            dataUrls.forEach(u => {
                                 const img = document.createElement('img');
                                 img.src = u;
                                 img.className = 'w-full rounded-md border';
@@ -2635,7 +2659,6 @@
                             openPhotoCapture(targetPoint, ts, coords, logId);
                         })();
                         closeModal(document.getElementById('nfc-point-scan-modal'));
-                        updatePatrolMapMarker(targetPoint.internalId, true);
                     },
                     () => { // Error callback
                         scanLogMessage("<span class='text-red-500'>無法獲取GPS位置</span>");
@@ -2645,7 +2668,6 @@
                             openPhotoCapture(targetPoint, ts, null, logId);
                         })();
                         closeModal(document.getElementById('nfc-point-scan-modal'));
-                        updatePatrolMapMarker(targetPoint.internalId, true);
                     }
                 );
             } else {
@@ -2764,7 +2786,6 @@
                         const logId = await savePatrolLog(targetPoint, ts, coords);
                         openPhotoCapture(targetPoint, ts, coords, logId);
                         closeQRScan();
-                        updatePatrolMapMarker(targetPoint.internalId, true);
                     },
                     async () => {
                         qrLog('<span class=\'text-red-500\'>無法獲取GPS位置</span>');
@@ -2772,7 +2793,6 @@
                         const logId = await savePatrolLog(targetPoint, ts, null);
                         openPhotoCapture(targetPoint, ts, null, logId);
                         closeQRScan();
-                        updatePatrolMapMarker(targetPoint.internalId, true);
                     }
                 );
             } catch(e){
@@ -2994,7 +3014,12 @@
                         uploadData.push({ url, note: (noteEl?.value || '').trim() });
                     }
                     const urls = uploadData.map(d => d.url);
-                    const payload = { photos: arrayUnion(...urls), photoDetails: arrayUnion(...uploadData) };
+                    let payload = { photos: arrayUnion(...urls), photoDetails: arrayUnion(...uploadData) };
+                    // 若取得下載URL失敗（CORS 或網路），以 data URL 作為備援，確保可視與完成判定
+                    if (urls.length === 0) {
+                        const dataUrls = items.map(it => it.querySelector('img')?.src).filter(Boolean);
+                        payload = { photoDataUrls: arrayUnion(...dataUrls) };
+                    }
                     try {
                         await updateDoc(doc(db,'patrol_logs', logId), payload);
                     } catch(upErr){
@@ -3408,7 +3433,10 @@
                 completedPointIds.clear();
                 snap.forEach(docSnap => {
                     const d = docSnap.data();
-                    if (d && d.patrolPointId) completedPointIds.add(d.patrolPointId);
+                    const hasPhotos = (Array.isArray(d.photos) && d.photos.length > 0)
+                        || (Array.isArray(d.photoDetails) && d.photoDetails.length > 0)
+                        || (Array.isArray(d.photoDataUrls) && d.photoDataUrls.length > 0);
+                    if (d && d.patrolPointId && hasPhotos) completedPointIds.add(d.patrolPointId);
                 });
                 applyCompletedState();
             });
