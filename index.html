@@ -673,13 +673,32 @@
             <h3 id="nfc-scan-point-name" class="text-xl font-bold mb-2"></h3>
             <p class="text-gray-600 mb-4">請靠近對應的NFC標籤...</p>
             <div id="nfc-scan-log" class="text-left text-sm text-gray-700 bg-gray-50 p-3 rounded-lg h-24 overflow-y-auto"></div>
-             <button id="close-nfc-scan-modal-btn" class="mt-4 px-4 py-2 bg-gray-200 text-gray-800 rounded-md">取消</button>
+            <div class="mt-4 flex justify-center gap-2">
+                <button id="switch-to-qr-btn" class="px-4 py-2 bg-blue-500 text-white rounded-md">改用QR掃碼</button>
+                <button id="close-nfc-scan-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR 掃碼 Modal -->
+    <div id="qr-scan-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center hidden z-[7000]">
+        <div class="bg-white p-6 rounded-lg shadow-xl text-center">
+            <h3 id="qr-scan-point-name" class="text-xl font-bold mb-2"></h3>
+            <p class="text-gray-600 mb-2">請對準 QR Code 以開始掃描...</p>
+            <video id="qr-video" class="w-80 mx-auto rounded bg-black" autoplay playsinline></video>
+            <canvas id="qr-canvas" class="hidden"></canvas>
+            <div id="qr-scan-log" class="text-left text-sm text-gray-700 bg-gray-50 p-3 rounded-lg h-24 overflow-y-auto mt-2"></div>
+            <div class="mt-4 flex justify-center gap-2">
+                <button id="close-qr-scan-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md">取消</button>
+            </div>
         </div>
     </div>
 
     
 
 
+    <!-- jsQR for QR decoding (fallback when BarcodeDetector is unavailable) -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <!-- Firebase SDKs -->
     <script type="module">
         // 匯入 Firebase 模組
@@ -2606,6 +2625,146 @@
                 scanLogMessage(`❌ 標籤不符，請掃描正確的標籤。`);
             }
         }
+
+        // --- QR 掃碼功能 ---
+        const qrScanModal = document.getElementById('qr-scan-modal');
+        const qrVideo = document.getElementById('qr-video');
+        const qrCanvas = document.getElementById('qr-canvas');
+        const qrScanLog = document.getElementById('qr-scan-log');
+        let qrScanStream = null;
+        let qrScanLoopId = null;
+
+        function qrLog(msg){
+            const p = document.createElement('p');
+            const time = formatTime24(new Date());
+            p.innerHTML = `<span class="font-mono text-gray-400">[${time}]</span> ${msg}`;
+            qrScanLog.prepend(p);
+        }
+
+        async function startQRScan(targetPoint){
+            qrScanLog.innerHTML = '';
+            document.getElementById('qr-scan-point-name').textContent = `掃描: ${targetPoint.name}`;
+            openModal(qrScanModal);
+            // 優先使用 BarcodeDetector
+            try {
+                if ('BarcodeDetector' in window) {
+                    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+                    qrLog('啟用相機中...');
+                    qrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    qrVideo.srcObject = qrScanStream;
+                    await qrVideo.play();
+                    const scan = async () => {
+                        try {
+                            const barcodes = await detector.detect(qrVideo);
+                            if (barcodes && barcodes.length > 0) {
+                                const value = barcodes[0].rawValue || barcodes[0].rawValueText || '';
+                                await handleQRValue(value, targetPoint);
+                                return; // stop loop
+                            }
+                        } catch(e){}
+                        qrScanLoopId = requestAnimationFrame(scan);
+                    };
+                    qrScanLoopId = requestAnimationFrame(scan);
+                    return;
+                }
+            } catch(e){
+                qrLog(`<span class='text-red-500'>BarcodeDetector 無法使用，改用 jsQR。</span>`);
+            }
+
+            // 回退：使用 jsQR 對 video 畫面進行取樣
+            try {
+                qrLog('啟用相機中...');
+                qrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                qrVideo.srcObject = qrScanStream;
+                await qrVideo.play();
+                const ctx = qrCanvas.getContext('2d');
+                const loop = () => {
+                    const w = qrVideo.videoWidth;
+                    const h = qrVideo.videoHeight;
+                    if (w && h) {
+                        qrCanvas.width = w; qrCanvas.height = h;
+                        ctx.drawImage(qrVideo, 0, 0, w, h);
+                        const imgData = ctx.getImageData(0, 0, w, h);
+                        const code = jsQR(imgData.data, imgData.width, imgData.height);
+                        if (code && code.data) {
+                            handleQRValue(code.data, targetPoint);
+                            return; // stop loop
+                        }
+                    }
+                    qrScanLoopId = requestAnimationFrame(loop);
+                };
+                qrScanLoopId = requestAnimationFrame(loop);
+            } catch(err){
+                alert('無法啟用相機: ' + (err.message || err));
+                closeQRScan();
+            }
+        }
+
+        async function handleQRValue(value, targetPoint){
+            try {
+                qrLog(`讀取到 QR: ${value}`);
+                // 與巡邏點比對邏輯：
+                // 1) 直接比對巡邏點的 nfcCode；或
+                // 2) 若 QR 內容為 JSON，支援 { code, id } 等欄位
+                let matched = false;
+                let codeStr = value;
+                try {
+                    const obj = JSON.parse(value);
+                    if (obj && (obj.nfcCode || obj.code)) codeStr = obj.nfcCode || obj.code;
+                } catch(_){}
+                if (targetPoint.nfcCode && targetPoint.nfcCode === codeStr) matched = true;
+                if (targetPoint.code && targetPoint.code === codeStr) matched = true;
+                if (!matched){
+                    qrLog(`<span class='text-red-500'>QR 內容與巡邏點不符。</span>`);
+                    return;
+                }
+
+                qrLog('正在獲取GPS位置...');
+                getGPSLocation(
+                    async (coords) => {
+                        qrLog('GPS位置已獲取');
+                        const ts = new Date();
+                        const logId = await savePatrolLog(targetPoint, ts, coords);
+                        openPhotoCapture(targetPoint, ts, coords, logId);
+                        closeQRScan();
+                        updatePatrolMapMarker(targetPoint.internalId, true);
+                    },
+                    async () => {
+                        qrLog('<span class=\'text-red-500\'>無法獲取GPS位置</span>');
+                        const ts = new Date();
+                        const logId = await savePatrolLog(targetPoint, ts, null);
+                        openPhotoCapture(targetPoint, ts, null, logId);
+                        closeQRScan();
+                        updatePatrolMapMarker(targetPoint.internalId, true);
+                    }
+                );
+            } catch(e){
+                qrLog(`<span class='text-red-500'>QR 處理錯誤: ${e}</span>`);
+            }
+        }
+
+        function closeQRScan(){
+            if (qrScanLoopId) cancelAnimationFrame(qrScanLoopId);
+            qrScanLoopId = null;
+            if (qrScanStream) {
+                try { qrScanStream.getTracks().forEach(t => t.stop()); } catch(_){ }
+            }
+            qrScanStream = null;
+            closeModal(qrScanModal);
+        }
+
+        document.getElementById('close-qr-scan-modal-btn').addEventListener('click', closeQRScan);
+        let lastScanTargetPoint = null;
+        const originalStartNFCScan = startNFCScan;
+        startNFCScan = async function(point){ lastScanTargetPoint = point; return originalStartNFCScan(point); };
+        document.getElementById('switch-to-qr-btn').addEventListener('click', () => {
+            if (lastScanTargetPoint) {
+                closeModal(nfcPointScanModal);
+                startQRScan(lastScanTargetPoint);
+            } else {
+                alert('尚未識別巡邏點，請從地圖點選巡邏點後再試。');
+            }
+        });
         
         async function savePatrolLog(patrolPoint, timestamp, scanLocation) {
             if (!currentUser || !activePatrol) {
