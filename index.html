@@ -2243,7 +2243,7 @@
                 populateSelect(document.getElementById('user-community'), communitiesOptions, '選擇社區');
                 populateMultiSelect(document.getElementById('user-service-communities'), communitiesOptions);
                 document.getElementById('user-community-container').classList.add('hidden');
-                document.getElementById('user-service-communities-container').classList.add('hidden');
+                document.getElementById('user-service-communities-container').classList.remove('hidden');
                 openModal(userModal);
             }
             if (e.target.id === 'close-user-modal-btn') closeModal(userModal);
@@ -2267,16 +2267,13 @@
                     await populateSelect(communitySelect, communitiesOptions, '選擇社區');
                     populateMultiSelect(document.getElementById('user-service-communities'), communitiesOptions);
                     const serviceContainer = document.getElementById('user-service-communities-container');
+                    // 服務社區選項在編輯時一律顯示；所屬社區僅在總幹事顯示
+                    serviceContainer.classList.remove('hidden');
                     if (data.role === ROLES.CHIEF) {
                         document.getElementById('user-community-container').classList.remove('hidden');
-                        serviceContainer.classList.remove('hidden');
                         communitySelect.value = data.communityId || '';
-                    } else if (data.role === ROLES.GUARD) {
-                        document.getElementById('user-community-container').classList.add('hidden');
-                        serviceContainer.classList.remove('hidden');
                     } else {
                         document.getElementById('user-community-container').classList.add('hidden');
-                        serviceContainer.classList.add('hidden');
                     }
                     const multi = document.getElementById('user-service-communities');
                     const selectedIds = Array.isArray(data.communityIds) ? data.communityIds : [];
