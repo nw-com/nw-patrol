@@ -1108,11 +1108,20 @@
         // Community Management
         function listenForCommunities() {
             const q = query(collection(db, "communities"));
-            communitiesUnsubscribe = onSnapshot(q, (querySnapshot) => {
-                const communities = [];
-                querySnapshot.forEach((doc) => communities.push({ id: doc.id, ...doc.data() }));
-                renderCommunities(communities);
-            });
+            communitiesUnsubscribe = onSnapshot(
+                q,
+                (querySnapshot) => {
+                    const communities = [];
+                    querySnapshot.forEach((doc) => communities.push({ id: doc.id, ...doc.data() }));
+                    renderCommunities(communities);
+                },
+                (error) => {
+                    console.error('社區即時監聽失敗：', error);
+                    if (communitiesList) {
+                        communitiesList.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-500">權限不足，無法載入社區列表</td></tr>`;
+                    }
+                }
+            );
         }
 
         function renderCommunities(communities) {
@@ -1158,12 +1167,45 @@
         
         // User Management
         function listenForUsers() {
-            const q = query(collection(db, "users"));
-            usersUnsubscribe = onSnapshot(q, (querySnapshot) => {
-                const users = [];
-                querySnapshot.forEach((doc) => users.push({ id: doc.id, ...doc.data() }));
-                renderUsers(users);
-            });
+            // 僅管理層訂閱整個 users；其他角色只訂閱自己的文件，避免觸發規則拒絕
+            if (usersUnsubscribe) usersUnsubscribe();
+            const role = userProfile?.role;
+            try {
+                if (role === ROLES.ADMIN || role === ROLES.EXECUTIVE) {
+                    const q = query(collection(db, "users"));
+                    usersUnsubscribe = onSnapshot(
+                        q,
+                        (querySnapshot) => {
+                            const users = [];
+                            querySnapshot.forEach((doc) => users.push({ id: doc.id, ...doc.data() }));
+                            renderUsers(users);
+                        },
+                        (error) => {
+                            console.error('使用者即時監聽失敗：', error);
+                            if (usersList) {
+                                usersList.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">權限不足，無法載入使用者列表</td></tr>`;
+                            }
+                        }
+                    );
+                } else if (currentUser) {
+                    const ref = doc(db, "users", currentUser.uid);
+                    usersUnsubscribe = onSnapshot(
+                        ref,
+                        (docSnap) => {
+                            const users = docSnap.exists() ? [{ id: docSnap.id, ...docSnap.data() }] : [];
+                            renderUsers(users);
+                        },
+                        (error) => {
+                            console.error('使用者（本人的）監聽失敗：', error);
+                            if (usersList) {
+                                usersList.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">權限不足或未登入，無法載入個人資料</td></tr>`;
+                            }
+                        }
+                    );
+                }
+            } catch (error) {
+                console.error('初始化使用者監聽失敗：', error);
+            }
         }
         
         function renderUsers(users) {
@@ -1274,6 +1316,22 @@
             return options;
         }
 
+        // 安全載入社區列表：權限不足或未登入時不致崩潰
+        async function safeLoadCommunitiesForUserModal(communitySelectEl, serviceMultiEl) {
+            try {
+                const communitiesOptions = await getOptionsForSelect('communities', 'name');
+                if (communitySelectEl) populateSelect(communitySelectEl, communitiesOptions, '選擇社區');
+                if (serviceMultiEl) populateMultiSelect(serviceMultiEl, communitiesOptions);
+                return communitiesOptions;
+            } catch (e) {
+                console.error('讀取社區列表失敗：', e);
+                alert('讀取社區列表失敗：權限不足或未登入。');
+                if (communitySelectEl) communitySelectEl.disabled = true;
+                if (serviceMultiEl) serviceMultiEl.disabled = true;
+                return [];
+            }
+        }
+
         async function getPatrolStaffForSelect() {
             const q = query(collection(db, "users"), where("role", "in", [ROLES.GUARD, ROLES.CHIEF]));
             const snapshot = await getDocs(q);
@@ -1324,13 +1382,46 @@
             let constraints = [];
             if (communityFilter) constraints.push(where("communityId", "==", communityFilter));
             if (userFilter) constraints.push(where("userId", "==", userFilter));
+
+            // 依角色加上必要過濾，避免整集合監聽被規則拒絕
+            const role = userProfile?.role;
+            if (role === ROLES.CHIEF) {
+                if (userProfile?.communityId) {
+                    constraints.push(where("communityId", "==", userProfile.communityId));
+                } else {
+                    if (schedulesList) {
+                        schedulesList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">總幹事帳號未設定所屬社區</td></tr>`;
+                    }
+                    return;
+                }
+            } else if (role === ROLES.GUARD) {
+                const ids = Array.isArray(userProfile?.communityIds) ? userProfile.communityIds.filter(Boolean) : [];
+                if (!ids.length) {
+                    if (schedulesList) {
+                        schedulesList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-gray-500">尚未設定服務社區，請至設定頁面編輯帳號</td></tr>`;
+                    }
+                    return;
+                }
+                // Firestore 'in' 限制最多 10 個值，若超過先取前 10 個以避免錯誤
+                const limited = ids.slice(0, 10);
+                constraints.push(where("communityId", "in", limited));
+            }
             
             const q = query(collection(db, "schedules"), ...constraints);
-            schedulesUnsubscribe = onSnapshot(q, (querySnapshot) => {
-                const schedules = [];
-                querySnapshot.forEach((doc) => schedules.push({ id: doc.id, ...doc.data() }));
-                renderSchedules(schedules);
-            });
+            schedulesUnsubscribe = onSnapshot(
+                q,
+                (querySnapshot) => {
+                    const schedules = [];
+                    querySnapshot.forEach((doc) => schedules.push({ id: doc.id, ...doc.data() }));
+                    renderSchedules(schedules);
+                },
+                (error) => {
+                    console.error('排程即時監聽失敗：', error);
+                    if (schedulesList) {
+                        schedulesList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">權限不足，無法載入排程</td></tr>`;
+                    }
+                }
+            );
         }
         
         function formatWeeklyTimes(weeklyTimes) {
@@ -2239,9 +2330,10 @@
                 document.getElementById('user-email').disabled = false;
                 document.getElementById('password-container').classList.remove('hidden');
                 document.getElementById('password-help-text').textContent = '新增帳號時為必填 (至少6個字元)。';
-                const communitiesOptions = await getOptionsForSelect('communities', 'name');
-                populateSelect(document.getElementById('user-community'), communitiesOptions, '選擇社區');
-                populateMultiSelect(document.getElementById('user-service-communities'), communitiesOptions);
+                await safeLoadCommunitiesForUserModal(
+                    document.getElementById('user-community'),
+                    document.getElementById('user-service-communities')
+                );
                 document.getElementById('user-community-container').classList.add('hidden');
                 document.getElementById('user-service-communities-container').classList.remove('hidden');
                 openModal(userModal);
@@ -2263,9 +2355,10 @@
                     document.getElementById('user-password').value = '';
                     
                     const communitySelect = document.getElementById('user-community');
-                    const communitiesOptions = await getOptionsForSelect('communities', 'name');
-                    await populateSelect(communitySelect, communitiesOptions, '選擇社區');
-                    populateMultiSelect(document.getElementById('user-service-communities'), communitiesOptions);
+                    const communitiesOptions = await safeLoadCommunitiesForUserModal(
+                        communitySelect,
+                        document.getElementById('user-service-communities')
+                    );
                     const serviceContainer = document.getElementById('user-service-communities-container');
                     // 服務社區選項在編輯時一律顯示；所屬社區僅在總幹事顯示
                     serviceContainer.classList.remove('hidden');
@@ -3547,17 +3640,24 @@
                     }
                 });
             };
-            patrolLogsUnsubscribe = onSnapshot(logsQuery, (snap) => {
-                completedPointIds.clear();
-                snap.forEach(docSnap => {
-                    const d = docSnap.data();
-                    const hasPhotos = (Array.isArray(d.photos) && d.photos.length > 0)
-                        || (Array.isArray(d.photoDetails) && d.photoDetails.length > 0)
-                        || (Array.isArray(d.photoDataUrls) && d.photoDataUrls.length > 0);
-                    if (d && d.patrolPointId && hasPhotos) completedPointIds.add(d.patrolPointId);
-                });
-                applyCompletedState();
-            });
+            patrolLogsUnsubscribe = onSnapshot(
+                logsQuery,
+                (snap) => {
+                    completedPointIds.clear();
+                    snap.forEach(docSnap => {
+                        const d = docSnap.data();
+                        const hasPhotos = (Array.isArray(d.photos) && d.photos.length > 0)
+                            || (Array.isArray(d.photoDetails) && d.photoDetails.length > 0)
+                            || (Array.isArray(d.photoDataUrls) && d.photoDataUrls.length > 0);
+                        if (d && d.patrolPointId && hasPhotos) completedPointIds.add(d.patrolPointId);
+                    });
+                    applyCompletedState();
+                },
+                (error) => {
+                    console.error('巡邏紀錄即時監聽失敗：', error);
+                    // 不阻斷 UI，持續顯示目前狀態，但停止即時更新
+                }
+            );
 
             const redIcon = new L.Icon({
                 iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',

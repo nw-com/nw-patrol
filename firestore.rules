@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function getUser(uid) {
+      return get(/databases/$(db)/documents/users/$(uid)).data;
+    }
+    function isAuth() {
+      return request.auth != null;
+    }
+    function hasRole(role) {
+      return isAuth() && getUser(request.auth.uid).role == role;
+    }
+    function isAdmin() {
+      return hasRole('管理員');
+    }
+    function isExecutive() {
+      return hasRole('高階主管');
+    }
+    function isChief() {
+      return hasRole('總幹事');
+    }
+    function isGuard() {
+      return hasRole('保全');
+    }
+
+    // 取得排程所屬社區（避免在 allow 條件中使用 let）
+    function scheduleCommunity(scheduleId) {
+      return get(/databases/$(db)/documents/schedules/$(scheduleId)).data.communityId;
+    }
+
+    // 社區：供下拉選單與頁面顯示
+    match /communities/{communityId} {
+      // 建議至少開放所有已登入者可讀
+      allow read: if isAuth();
+      // 寫入只允許管理層
+      allow write: if isAdmin() || isExecutive();
+    }
+
+    // 使用者：管理頁（設定）使用
+    match /users/{userId} {
+      // 管理員/高階主管可讀所有；其他只可讀自己的文件
+      allow read: if isAdmin() || isExecutive() || (isAuth() && request.auth.uid == userId);
+      // 建立/更新/刪除使用者資料僅限管理層
+      allow write: if isAdmin() || isExecutive();
+    }
+
+    // 排程：任務清單與巡邏頁
+    match /schedules/{scheduleId} {
+      // 讀取規則：
+      // - 管理員/高階主管可讀所有
+      // - 總幹事可讀自身所屬社區的排程（communityId）
+      // - 保全可讀其「服務社區」列表（communityIds）中的排程
+      allow read: if
+        isAdmin() || isExecutive() ||
+        (isChief() && getUser(request.auth.uid).communityId == resource.data.communityId) ||
+        (isGuard() && (resource.data.communityId in getUser(request.auth.uid).communityIds));
+
+      // 寫入規則：依你的需求，通常管理層與總幹事可維護排程
+      allow write: if isAdmin() || isExecutive() || isChief();
+    }
+
+    // 巡邏紀錄：巡邏頁與補登（注意前端集合名稱為 patrol_logs）
+    match /patrol_logs/{logId} {
+      // 讀取：可讀屬於使用者有權限看到之排程的紀錄
+      allow read: if
+        isAdmin() || isExecutive() ||
+        (isChief() && scheduleCommunity(resource.data.scheduleId) == getUser(request.auth.uid).communityId) ||
+        (isGuard() && scheduleCommunity(resource.data.scheduleId) in getUser(request.auth.uid).communityIds);
+
+      // 寫入：允許保全與總幹事新增/更新自己執行的巡邏紀錄；
+      // 這裡以 scheduleId 的社區歸屬作為授權依據
+      allow write: if
+        isAdmin() || isExecutive() ||
+        (isChief() && scheduleCommunity(request.resource.data.scheduleId) == getUser(request.auth.uid).communityId) ||
+        (isGuard() && scheduleCommunity(request.resource.data.scheduleId) in getUser(request.auth.uid).communityIds);
+    }
+  }
+}
