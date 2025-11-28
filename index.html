@@ -85,13 +85,13 @@
                 <form id="login-form">
                     <div class="mb-4 text-left">
                         <div class="flex justify-between items-center mb-1">
-                            <label for="email" class="block text-sm font-medium text-gray-700">帳號 (Email)</label>
+                            <label for="email" class="block text-sm font-medium text-gray-700">帳號 (電子郵件/手機擇一)</label>
                             <div class="flex items-center">
                                 <input id="remember-me" name="remember-me" type="checkbox" class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
                                 <label for="remember-me" class="ml-2 block text-sm text-gray-900">記住我</label>
                             </div>
                         </div>
-                        <input type="email" id="email" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500" placeholder="user@example.com" required>
+                        <input type="text" id="email" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500" placeholder="user@example.com 或 09xxxxxxxx" required>
                     </div>
                     <div class="mb-6 text-left">
                         <label for="password" class="block text-sm font-medium text-gray-700 mb-1">密碼</label>
@@ -376,8 +376,8 @@
                             <input type="text" id="user-name" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
                         </div>
                         <div id="user-service-communities-container" class="mb-4 hidden">
-                            <label for="user-service-communities" class="text-left block text-sm font-medium text-gray-700">服務社區</label>
-                            <select id="user-service-communities" multiple class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500"></select>
+                            <label for="user-service-communities-list" class="text-left block text-sm font-medium text-gray-700">服務社區</label>
+                            <div id="user-service-communities-list" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
                             <p class="text-xs text-left text-gray-500 mt-1">可多選；服務社區的任務皆會顯示。</p>
                         </div>
                         <div id="user-community-container" class="mb-4 hidden">
@@ -388,6 +388,10 @@
                         <div class="mb-4">
                             <label for="user-email" class="text-left block text-sm font-medium text-gray-700">電子郵件 (帳號)</label>
                             <input type="email" id="user-email" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
+                        </div>
+                        <div class="mb-4">
+                            <label for="user-phone" class="text-left block text-sm font-medium text-gray-700">手機號碼</label>
+                            <input type="text" id="user-phone" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" placeholder="09xxxxxxxx">
                         </div>
                         <div id="password-container" class="mb-4">
                             <label for="user-password" class="text-left block text-sm font-medium text-gray-700">密碼</label>
@@ -447,20 +451,20 @@
                      <h4 class="font-semibold" id="patrol-point-form-title">新增巡邏點</h4>
                      <input type="hidden" id="patrol-point-internal-id">
                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <input type="text" id="patrol-point-code" placeholder="巡邏點編號" class="px-3 py-2 border border-gray-300 rounded-md" required>
+                        <input type="text" id="patrol-point-code" placeholder="巡邏點編號" class="px-3 py-2 border border-gray-300 rounded-md">
                          <div class="flex items-center space-x-2">
-                            <input type="text" id="patrol-point-location" placeholder="定位位置" class="flex-grow px-3 py-2 border border-gray-300 rounded-md" required>
+                            <input type="text" id="patrol-point-location" placeholder="定位位置" class="flex-grow px-3 py-2 border border-gray-300 rounded-md">
                             <button type="button" class="get-gps-btn p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600" data-target="patrol-point-location">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                             </button>
                          </div>
                      </div>
                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <input type="text" id="patrol-point-name" placeholder="巡邏點名稱" class="px-3 py-2 border border-gray-300 rounded-md" required>
-                         <div class="flex items-center space-x-2">
-                            <input type="text" id="patrol-point-nfc-code" placeholder="NFC Code (16碼)" class="flex-grow px-3 py-2 border border-gray-300 rounded-md bg-gray-200" readonly>
+                        <input type="text" id="patrol-point-name" placeholder="巡邏點名稱" class="px-3 py-2 border border-gray-300 rounded-md">
+                        <div class="flex items-center space-x-2">
+                            <input type="text" id="patrol-point-nfc-code" placeholder="QR/NFC 代碼（共用，可輸入或產生；建議16碼）" class="flex-grow px-3 py-2 border border-gray-300 rounded-md">
                             <button id="generate-nfc-code-btn" type="button" class="px-3 py-2 bg-blue-500 text-white rounded-md text-sm">產生</button>
-                         </div>
+                        </div>
                      </div>
                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <textarea id="patrol-point-desc" placeholder="巡邏點描述（選填）" class="px-3 py-2 border border-gray-300 rounded-md"></textarea>
@@ -705,8 +709,8 @@
     <script type="module">
         // 匯入 Firebase 模組
         import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { initializeFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where, getDocs, Timestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { initializeFirestore, doc, getDoc, setDoc, collection, addDoc, query, updateDoc, deleteDoc, where, getDocs, Timestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref as storageRef, uploadBytes, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // --- Firebase 設定 ---
@@ -742,12 +746,7 @@
             alert("Firebase 初始化失敗，請檢查您的設定。");
         }
 
-        function onSnapshotWrap() {
-            if (typeof window !== 'undefined' && window.REALTIME_DISABLED) {
-                return () => {};
-            }
-            return onSnapshot.apply(null, arguments);
-        }
+        
 
         (function suppressPreviewErrors(){
             try {
@@ -756,6 +755,8 @@
                     console.error = function(){
                         const msg = Array.from(arguments).map(a => (typeof a === 'string' ? a : '')).join(' ');
                         if (msg.includes('google.firestore.v1.Firestore/Listen/channel')) return;
+                        if (msg.includes('identitytoolkit.googleapis.com/v1/accounts:lookup')) return;
+                        if (msg.includes('net::ERR_ABORTED')) return;
                         return origError.apply(console, arguments);
                     }
                 }
@@ -778,6 +779,9 @@
                 if (msg.includes('missing or insufficient permissions') || msg.includes('permission-denied')) {
                     updateNetworkStatus('權限不足', 'text-red-600');
                 }
+                if (msg.includes('identitytoolkit.googleapis.com')) {
+                    updateNetworkStatus('登入服務異常', 'text-orange-600');
+                }
             } catch(_){}
         });
         window.addEventListener('error', (e) => {
@@ -785,6 +789,9 @@
                 const msg = String(e && e.message ? e.message : '').toLowerCase();
                 if (msg.includes('missing or insufficient permissions')) {
                     updateNetworkStatus('權限不足', 'text-red-600');
+                }
+                if (msg.includes('identitytoolkit.googleapis.com')) {
+                    updateNetworkStatus('登入服務異常', 'text-orange-600');
                 }
             } catch(_){}
         });
@@ -1036,19 +1043,36 @@
             }
         });
 
-        loginForm.addEventListener('submit', (e) => {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const email = loginForm.email.value;
+            const account = (loginForm.email.value || '').trim();
             const password = loginForm.password.value;
             loginError.textContent = '';
             if (rememberMeCheckbox.checked) {
-                localStorage.setItem('rememberedEmail', email);
+                localStorage.setItem('rememberedEmail', account);
             } else {
                 localStorage.removeItem('rememberedEmail');
             }
-            signInWithEmailAndPassword(auth, email, password)
+            let emailToUse = account;
+            try {
+                if (account && !account.includes('@')) {
+                    const q = query(collection(db, 'users'), where('phone', '==', account));
+                    const snap = await getDocs(q);
+                    if (!snap.empty) {
+                        const docSnap = snap.docs[0];
+                        const d = docSnap.data();
+                        if (d && d.email) emailToUse = d.email;
+                    } else {
+                        loginError.textContent = '找不到對應的手機號碼，請改用電子郵件登入。';
+                        return;
+                    }
+                }
+            } catch(_) {
+                loginError.textContent = '手機登入受限，請改用電子郵件登入。';
+                return;
+            }
+            signInWithEmailAndPassword(auth, emailToUse, password)
                 .catch((error) => {
-                    console.error("登入失敗:", error);
                     loginError.textContent = '帳號或密碼錯誤。';
                 });
         });
@@ -1159,32 +1183,16 @@
         // Community Management
         async function listenForCommunities() {
             const q = query(collection(db, "communities"));
-            if (window.REALTIME_DISABLED) {
-                try {
-                    const snap = await getDocs(q);
-                    const communities = [];
-                    snap.forEach((doc) => communities.push({ id: doc.id, ...doc.data() }));
-                    renderCommunities(communities);
-                } catch (error) {
-                    if (communitiesList) {
-                        communitiesList.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-500">權限不足，無法載入社區列表</td></tr>`;
-                    }
+            try {
+                const snap = await getDocs(q);
+                const communities = [];
+                snap.forEach((doc) => communities.push({ id: doc.id, ...doc.data() }));
+                renderCommunities(communities);
+            } catch (error) {
+                if (communitiesList) {
+                    communitiesList.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-500">權限不足，無法載入社區列表</td></tr>`;
                 }
-                return;
             }
-            communitiesUnsubscribe = onSnapshotWrap(
-                q,
-                (querySnapshot) => {
-                    const communities = [];
-                    querySnapshot.forEach((doc) => communities.push({ id: doc.id, ...doc.data() }));
-                    renderCommunities(communities);
-                },
-                (error) => {
-                    if (communitiesList) {
-                        communitiesList.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-500">權限不足，無法載入社區列表</td></tr>`;
-                    }
-                }
-            );
         }
 
         function renderCommunities(communities) {
@@ -1222,6 +1230,7 @@
                     await addDoc(collection(db, "communities"), data);
                 }
                 closeModal(communityModal);
+                await listenForCommunities();
             } catch (e) {
                 console.error("儲存社區失敗: ", e);
                 alert("儲存失敗");
@@ -1230,55 +1239,25 @@
         
         // User Management
         async function listenForUsers() {
-            // 僅管理層訂閱整個 users；其他角色只訂閱自己的文件，避免觸發規則拒絕
             if (usersUnsubscribe) usersUnsubscribe();
             const role = userProfile?.role;
             try {
                 if (role === ROLES.ADMIN || role === ROLES.EXECUTIVE) {
                     const q = query(collection(db, "users"));
-                    if (window.REALTIME_DISABLED) {
-                        const snap = await getDocs(q);
-                        const users = [];
-                        snap.forEach((doc) => users.push({ id: doc.id, ...doc.data() }));
-                        renderUsers(users);
-                    } else {
-                        usersUnsubscribe = onSnapshotWrap(
-                            q,
-                            (querySnapshot) => {
-                                const users = [];
-                                querySnapshot.forEach((doc) => users.push({ id: doc.id, ...doc.data() }));
-                                renderUsers(users);
-                            },
-                            (error) => {
-                                if (usersList) {
-                                    usersList.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">權限不足，無法載入使用者列表</td></tr>`;
-                                }
-                            }
-                        );
-                    }
+                    const snap = await getDocs(q);
+                    const users = [];
+                    snap.forEach((doc) => users.push({ id: doc.id, ...doc.data() }));
+                    renderUsers(users);
                 } else if (currentUser) {
                     const ref = doc(db, "users", currentUser.uid);
-                    if (window.REALTIME_DISABLED) {
-                        const docSnap = await getDoc(ref);
-                        const users = docSnap.exists() ? [{ id: docSnap.id, ...docSnap.data() }] : [];
-                        renderUsers(users);
-                    } else {
-                        usersUnsubscribe = onSnapshotWrap(
-                            ref,
-                            (docSnap) => {
-                                const users = docSnap.exists() ? [{ id: docSnap.id, ...docSnap.data() }] : [];
-                                renderUsers(users);
-                            },
-                            (error) => {
-                                if (usersList) {
-                                    usersList.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">權限不足或未登入，無法載入個人資料</td></tr>`;
-                                }
-                            }
-                        );
-                    }
+                    const docSnap = await getDoc(ref);
+                    const users = docSnap.exists() ? [{ id: docSnap.id, ...docSnap.data() }] : [];
+                    renderUsers(users);
                 }
             } catch (error) {
-                
+                if (usersList) {
+                    usersList.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">權限不足，無法載入使用者列表</td></tr>`;
+                }
             }
         }
         
@@ -1307,6 +1286,7 @@
             const role = document.getElementById('user-role').value;
             const name = document.getElementById('user-name').value;
             const email = document.getElementById('user-email').value;
+            const phone = (document.getElementById('user-phone')?.value || '').trim();
             const password = document.getElementById('user-password').value;
             if (!role || !name || !email) { 
                 alert("角色、姓名和電子郵件為必填項"); 
@@ -1314,16 +1294,13 @@
             }
 
             const data = { role, name, email };
-            // 守衛/總幹事：需選擇服務社區（可多選）
+            if (phone) data.phone = phone;
+            const serviceContainer = document.getElementById('user-service-communities-list');
+            const communityIds = Array.from(serviceContainer.querySelectorAll('input[type="checkbox"]:checked')).map(el => el.value);
             if (role === ROLES.GUARD || role === ROLES.CHIEF) {
-                const serviceSelect = document.getElementById('user-service-communities');
-                const communityIds = Array.from(serviceSelect.selectedOptions).map(opt => opt.value);
-                if (!communityIds.length) {
-                    alert('請選擇至少一個服務社區。');
-                    return;
-                }
-                data.communityIds = communityIds;
+                if (!communityIds.length) { alert('請選擇至少一個服務社區。'); return; }
             }
+            data.communityIds = communityIds;
             if (role === ROLES.CHIEF) {
                 const communityId = document.getElementById('user-community').value;
                 if (!communityId) {
@@ -1337,7 +1314,15 @@
                 // Editing an existing user
                 try {
                     await updateDoc(doc(db, "users", editingUserId), data);
+                    if (password && password.length >= 6) {
+                        if (currentUser && editingUserId === currentUser.uid) {
+                            try { await updatePassword(auth.currentUser, password); alert('密碼已更新'); } catch(_) { alert('密碼更新失敗'); }
+                        } else {
+                            try { await sendPasswordResetEmail(auth, email); alert('已寄送密碼重設信'); } catch(_) { alert('寄送密碼重設信失敗'); }
+                        }
+                    }
                     closeModal(userModal);
+                    await listenForUsers();
                 } catch (e) {
                      console.error("更新使用者失敗: ", e);
                      alert("更新失敗: " + e.message);
@@ -1363,6 +1348,7 @@
                     await setDoc(doc(db, "users", user.uid), data);
 
                     closeModal(userModal); // Success
+                    await listenForUsers();
                 } catch (e) {
                     console.error("創建使用者失敗: ", e);
                     if (e.code === 'auth/email-already-in-use') {
@@ -1427,13 +1413,20 @@
              });
         }
 
-        function populateMultiSelect(selectElement, options) {
-            selectElement.innerHTML = '';
+        function populateMultiSelect(containerElement, options) {
+            containerElement.innerHTML = '';
             options.forEach(opt => {
-                const option = document.createElement('option');
-                option.value = opt.id;
-                option.textContent = opt.text;
-                selectElement.appendChild(option);
+                const label = document.createElement('label');
+                label.className = 'flex items-center gap-2 py-1';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.value = opt.id;
+                cb.className = 'h-4 w-4 border-gray-300 rounded';
+                const span = document.createElement('span');
+                span.textContent = opt.text;
+                label.appendChild(cb);
+                label.appendChild(span);
+                containerElement.appendChild(label);
             });
         }
 
@@ -1482,32 +1475,16 @@
             }
             
             const q = query(collection(db, "schedules"), ...constraints);
-            if (window.REALTIME_DISABLED) {
-                try {
-                    const snap = await getDocs(q);
-                    const schedules = [];
-                    snap.forEach((doc) => schedules.push({ id: doc.id, ...doc.data() }));
-                    renderSchedules(schedules);
-                } catch (_) {
-                    if (schedulesList) {
-                        schedulesList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">權限不足，無法載入排程</td></tr>`;
-                    }
+            try {
+                const snap = await getDocs(q);
+                const schedules = [];
+                snap.forEach((doc) => schedules.push({ id: doc.id, ...doc.data() }));
+                renderSchedules(schedules);
+            } catch (_) {
+                if (schedulesList) {
+                    schedulesList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">權限不足，無法載入排程</td></tr>`;
                 }
-                return;
             }
-            schedulesUnsubscribe = onSnapshotWrap(
-                q,
-                (querySnapshot) => {
-                    const schedules = [];
-                    querySnapshot.forEach((doc) => schedules.push({ id: doc.id, ...doc.data() }));
-                    renderSchedules(schedules);
-                },
-                (error) => {
-                    if (schedulesList) {
-                        schedulesList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">權限不足，無法載入排程</td></tr>`;
-                    }
-                }
-            );
         }
         
         function formatWeeklyTimes(weeklyTimes) {
@@ -1619,6 +1596,7 @@
                     await addDoc(collection(db, "schedules"), data);
                 }
                 closeModal(scheduleModal);
+                await listenForSchedules();
             } catch (e) {
                 console.error("儲存排程失敗: ", e);
                 alert("儲存失敗");
@@ -1676,8 +1654,8 @@
                 requiresConfirm: !!form.querySelector('#patrol-point-requires-confirm')?.checked,
             };
 
-            if (!newPoint.code || !newPoint.location || !newPoint.name || !newPoint.nfcCode) {
-                alert('請填寫巡邏點的所有欄位');
+            if (!newPoint.nfcCode) {
+                alert('請至少填寫 QR/NFC 代碼');
                 return;
             }
 
@@ -2354,14 +2332,9 @@
                 let rowColor = 'bg-red-50';
 
                 if (isCompleted) {
-                    const distance = calculateDistance(point.location, log.scanLocation);
-                    if (distance <= 20) {
-                        statusText = '正常';
-                        statusColor = 'bg-green-200 text-green-800';
-                        rowColor = 'bg-green-50';
-                    } else {
-                        statusText = `異常 (距離 ${distance.toFixed(0)}m)`;
-                    }
+                    statusText = '正常';
+                    statusColor = 'bg-green-200 text-green-800';
+                    rowColor = 'bg-green-50';
                     // 若為超時巡邏則以紅色覆蓋顯示
                     if (log?.status === '超時巡邏') {
                         statusText = '超時巡邏';
@@ -2494,12 +2467,14 @@
                 editingUserId = null;
                 document.getElementById('user-modal-title').textContent = '新增帳號';
                 document.getElementById('user-form').reset();
+                const phoneInputEl = document.getElementById('user-phone');
+                if (phoneInputEl) phoneInputEl.value = '';
                 document.getElementById('user-email').disabled = false;
                 document.getElementById('password-container').classList.remove('hidden');
                 document.getElementById('password-help-text').textContent = '新增帳號時為必填 (至少6個字元)。';
                 await safeLoadCommunitiesForUserModal(
                     document.getElementById('user-community'),
-                    document.getElementById('user-service-communities')
+                    document.getElementById('user-service-communities-list')
                 );
                 document.getElementById('user-community-container').classList.add('hidden');
                 document.getElementById('user-service-communities-container').classList.remove('hidden');
@@ -2517,14 +2492,17 @@
                     document.getElementById('user-role').value = data.role;
                     document.getElementById('user-name').value = data.name;
                     document.getElementById('user-email').value = data.email;
+                    const phoneEl = document.getElementById('user-phone');
+                    if (phoneEl) phoneEl.value = data.phone || '';
                     document.getElementById('user-email').disabled = true;
-                    document.getElementById('password-container').classList.add('hidden');
+                    document.getElementById('password-container').classList.remove('hidden');
                     document.getElementById('user-password').value = '';
+                    document.getElementById('password-help-text').textContent = '留空則不變；若填寫將重設密碼。';
                     
                     const communitySelect = document.getElementById('user-community');
                     const communitiesOptions = await safeLoadCommunitiesForUserModal(
                         communitySelect,
-                        document.getElementById('user-service-communities')
+                        document.getElementById('user-service-communities-list')
                     );
                     const serviceContainer = document.getElementById('user-service-communities-container');
                     // 服務社區選項在編輯時一律顯示；所屬社區僅在總幹事顯示
@@ -2535,9 +2513,9 @@
                     } else {
                         document.getElementById('user-community-container').classList.add('hidden');
                     }
-                    const multi = document.getElementById('user-service-communities');
+                    const multi = document.getElementById('user-service-communities-list');
                     const selectedIds = Array.isArray(data.communityIds) ? data.communityIds : [];
-                    Array.from(multi.options).forEach(opt => { opt.selected = selectedIds.includes(opt.value); });
+                    Array.from(multi.querySelectorAll('input[type="checkbox"]')).forEach(cb => { cb.checked = selectedIds.includes(cb.value); });
                     openModal(userModal);
                 }
             }
@@ -3809,32 +3787,16 @@
                     }
                 });
             };
-            if (window.REALTIME_DISABLED) {
-                try {
-                    const snap = await getDocs(logsQuery);
-                    completedPointIds.clear();
-                    snap.forEach(docSnap => {
-                        const d = docSnap.data();
-                        const hasPhotos = (Array.isArray(d.photos) && d.photos.length > 0) || (Array.isArray(d.photoDetails) && d.photoDetails.length > 0) || (Array.isArray(d.photoDataUrls) && d.photoDataUrls.length > 0);
-                        if (d && d.patrolPointId && hasPhotos) completedPointIds.add(d.patrolPointId);
-                    });
-                    applyCompletedState();
-                } catch (_) {}
-            } else {
-                patrolLogsUnsubscribe = onSnapshotWrap(
-                    logsQuery,
-                    (snap) => {
-                        completedPointIds.clear();
-                        snap.forEach(docSnap => {
-                            const d = docSnap.data();
-                            const hasPhotos = (Array.isArray(d.photos) && d.photos.length > 0) || (Array.isArray(d.photoDetails) && d.photoDetails.length > 0) || (Array.isArray(d.photoDataUrls) && d.photoDataUrls.length > 0);
-                            if (d && d.patrolPointId && hasPhotos) completedPointIds.add(d.patrolPointId);
-                        });
-                        applyCompletedState();
-                    },
-                    () => {}
-                );
-            }
+            try {
+                const snap = await getDocs(logsQuery);
+                completedPointIds.clear();
+                snap.forEach(docSnap => {
+                    const d = docSnap.data();
+                    const hasPhotos = (Array.isArray(d.photos) && d.photos.length > 0) || (Array.isArray(d.photoDetails) && d.photoDetails.length > 0) || (Array.isArray(d.photoDataUrls) && d.photoDataUrls.length > 0);
+                    if (d && d.patrolPointId && hasPhotos) completedPointIds.add(d.patrolPointId);
+                });
+                applyCompletedState();
+            } catch (_) {}
 
             const points = task.patrolPoints || [];
             if (points.length === 0) {
@@ -3847,23 +3809,23 @@
                 const isCompleted = completedPointIds.has(point.internalId);
                 if (buttonsContainer) {
                     const row = document.createElement('div');
-                    row.className = `flex items-center justify-between rounded border px-3 py-2 ${isCompleted ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`;
+                    row.className = `flex items-center justify-between rounded border px-4 py-3 ${isCompleted ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`;
                     row.dataset.pointId = point.internalId;
                     row.dataset.completed = isCompleted ? 'true' : 'false';
                     const left = document.createElement('div');
                     left.className = 'flex items-center gap-2';
                     const title = document.createElement('div');
-                    title.className = 'font-semibold text-sm';
+                    title.className = 'font-bold text-base';
                     title.textContent = `${point.code} ${point.name}`;
                     const status = document.createElement('span');
-                    status.className = `text-xs ${isCompleted ? 'text-green-700' : 'text-red-700'}`;
+                    status.className = `text-sm ${isCompleted ? 'text-green-700' : 'text-red-700'}`;
                     status.textContent = isCompleted ? '已完成' : '未完成';
                     left.appendChild(title);
                     left.appendChild(status);
                     const right = document.createElement('div');
-                    right.className = 'flex items-center gap-2';
+                    right.className = 'flex items-center gap-3';
                     const nfcBtn = document.createElement('button');
-                    nfcBtn.className = 'px-2 py-1 text-xs rounded bg-blue-500 text-white';
+                    nfcBtn.className = 'px-3 py-2 text-sm rounded-lg bg-blue-600 text-white';
                     nfcBtn.textContent = 'NFC掃描';
                     nfcBtn.addEventListener('click', () => {
                         document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
@@ -3872,7 +3834,7 @@
                         startNFCScan(point);
                     });
                     const qrBtn = document.createElement('button');
-                    qrBtn.className = 'px-2 py-1 text-xs rounded bg-gray-800 text-white';
+                    qrBtn.className = 'px-3 py-2 text-sm rounded-lg bg-gray-900 text-white';
                     qrBtn.textContent = 'QR掃碼';
                     qrBtn.addEventListener('click', () => {
                         startQRScan(point);
