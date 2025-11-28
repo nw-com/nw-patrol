@@ -103,10 +103,15 @@
                             </button>
                         </div>
                     </div>
+                    <div class="mb-6 text-left hidden" id="phone-otp-container">
+                        <label for="phone-otp" class="block text-sm font-medium text-gray-700 mb-1">簡訊驗證碼</label>
+                        <input type="text" id="phone-otp" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500" placeholder="輸入6位數驗證碼">
+                    </div>
                     <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
                         登入
                     </button>
                     <p id="login-error" class="text-red-500 text-sm mt-4 text-center"></p>
+                    <div id="recaptcha-container" class="hidden"></div>
                 </form>
             </div>
         </div>
@@ -294,7 +299,10 @@
                         <div>
                             <div class="flex justify-between items-center mb-4">
                                 <h3 class="text-xl font-bold text-gray-800">帳號列表</h3>
-                                <button id="add-user-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm">新增帳號</button>
+                                <div class="flex items-center gap-2">
+                                    <button id="backfill-login-index-btn" class="bg-gray-700 hover:bg-gray-800 text-white font-bold py-2 px-4 rounded-lg text-sm">建立手機對照索引</button>
+                                    <button id="add-user-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm">新增帳號</button>
+                                </div>
                             </div>
                             <div class="bg-white rounded-lg shadow table-container">
                                 <table class="w-full text-sm text-left text-gray-500">
@@ -709,7 +717,7 @@
     <script type="module">
         // 匯入 Firebase 模組
         import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail, updatePassword, RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { initializeFirestore, doc, getDoc, setDoc, collection, addDoc, query, updateDoc, deleteDoc, where, getDocs, Timestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref as storageRef, uploadBytes, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
@@ -812,6 +820,8 @@
         const eyeOffIcon = document.getElementById('eye-off-icon');
         const rememberMeCheckbox = document.getElementById('remember-me');
         const emailInput = document.getElementById('email');
+        const phoneOtpInput = document.getElementById('phone-otp');
+        const phoneOtpContainer = document.getElementById('phone-otp-container');
         
         // Settings page elements
         const communitiesList = document.getElementById('communities-list');
@@ -1000,7 +1010,7 @@
 
         const PAGE_PERMISSIONS = {
             'home': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF, ROLES.GUARD],
-            'patrol': [ROLES.ADMIN, ROLES.CHIEF, ROLES.GUARD],
+            'patrol': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF, ROLES.GUARD],
             'data': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF, ROLES.GUARD],
             'schedule': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF],
             'settings': [ROLES.ADMIN]
@@ -1043,6 +1053,17 @@
             }
         });
 
+        function normalizePhone(input){
+            let s = String(input || '').trim();
+            s = s.replace(/[\s\-()]/g, '');
+            if (!s) return '';
+            if (s.startsWith('+')) return s;
+            if (/^09\d{8}$/.test(s)) return "+886" + s.slice(1);
+            if (/^8869\d{8}$/.test(s)) return "+" + s;
+            if (/^9\d{8}$/.test(s)) return "+886" + s; 
+            return s;
+        }
+
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const account = (loginForm.email.value || '').trim();
@@ -1053,28 +1074,36 @@
             } else {
                 localStorage.removeItem('rememberedEmail');
             }
-            let emailToUse = account;
-            try {
-                if (account && !account.includes('@')) {
-                    const q = query(collection(db, 'users'), where('phone', '==', account));
-                    const snap = await getDocs(q);
-                    if (!snap.empty) {
-                        const docSnap = snap.docs[0];
-                        const d = docSnap.data();
-                        if (d && d.email) emailToUse = d.email;
+            if (account && !account.includes('@')) {
+                try {
+                    const phoneKey = normalizePhone(account);
+                    const idxSnap = await getDoc(doc(db, 'login_index', phoneKey));
+                    if (idxSnap.exists()) {
+                        const idx = idxSnap.data();
+                        if (!idx || !idx.email) {
+                            loginError.textContent = '手機未綁定電子郵件，請改用電子郵件登入。';
+                            return;
+                        }
+                        await signInWithEmailAndPassword(auth, idx.email, password);
+                        loginError.textContent = '';
                     } else {
-                        loginError.textContent = '找不到對應的手機號碼，請改用電子郵件登入。';
+                        if (!window._recaptchaVerifier) {
+                            window._recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
+                        }
+                        window._confirmationResult = await signInWithPhoneNumber(auth, phoneKey, window._recaptchaVerifier);
+                        phoneOtpContainer.classList.remove('hidden');
+                        loginError.textContent = '已發送驗證碼，請輸入簡訊驗證碼。';
                         return;
                     }
+                } catch(_) {
+                    loginError.textContent = '手機登入受限，請改用電子郵件登入。';
                 }
-            } catch(_) {
-                loginError.textContent = '手機登入受限，請改用電子郵件登入。';
-                return;
+            } else {
+                signInWithEmailAndPassword(auth, account, password)
+                    .catch(() => {
+                        loginError.textContent = '帳號或密碼錯誤。';
+                    });
             }
-            signInWithEmailAndPassword(auth, emailToUse, password)
-                .catch((error) => {
-                    loginError.textContent = '帳號或密碼錯誤。';
-                });
         });
 
         welcomeButton.addEventListener('click', () => {
@@ -1313,7 +1342,17 @@
             if (editingUserId) {
                 // Editing an existing user
                 try {
+                    const existingDocSnap = await getDoc(doc(db, "users", editingUserId));
+                    const prev = existingDocSnap.exists() ? existingDocSnap.data() : {};
                     await updateDoc(doc(db, "users", editingUserId), data);
+                    const prevPhone = prev.phone ? normalizePhone(prev.phone) : '';
+                    const newPhone = phone ? normalizePhone(phone) : '';
+                    if (prevPhone && prevPhone !== newPhone) {
+                        try { await deleteDoc(doc(db, 'login_index', prevPhone)); } catch(_){}
+                    }
+                    if (newPhone) {
+                        try { await setDoc(doc(db, 'login_index', newPhone), { email }); } catch(_){}
+                    }
                     if (password && password.length >= 6) {
                         if (currentUser && editingUserId === currentUser.uid) {
                             try { await updatePassword(auth.currentUser, password); alert('密碼已更新'); } catch(_) { alert('密碼更新失敗'); }
@@ -1346,6 +1385,9 @@
 
                     // 2. Create user profile in our main Firestore with the new user's UID
                     await setDoc(doc(db, "users", user.uid), data);
+                    if (phone) {
+                        try { await setDoc(doc(db, 'login_index', normalizePhone(phone)), { email }); } catch(_){}
+                    }
 
                     closeModal(userModal); // Success
                     await listenForUsers();
@@ -1362,6 +1404,47 @@
                     // 3. Clean up the temporary app instance
                     await deleteApp(tempApp);
                 }
+            }
+        }
+
+        async function backfillLoginIndex() {
+            if (!userProfile || (userProfile.role !== ROLES.ADMIN && userProfile.role !== ROLES.EXECUTIVE)) {
+                alert('權限不足，僅管理員或高階主管可操作。');
+                return;
+            }
+            const btn = document.getElementById('backfill-login-index-btn');
+            if (btn) { btn.disabled = true; btn.textContent = '建立中…'; }
+            try {
+                const snap = await getDocs(query(collection(db, 'users')));
+                let processed = 0;
+                let skipped = 0;
+                let errors = 0;
+                let written = 0;
+                const mappings = new Map();
+                snap.forEach(docSnap => {
+                    const d = docSnap.data();
+                    const email = d && d.email ? String(d.email).trim() : '';
+                    const phoneRaw = d && d.phone ? String(d.phone).trim() : '';
+                    if (!email || !phoneRaw) { skipped++; return; }
+                    const phoneKey = normalizePhone(phoneRaw);
+                    if (!phoneKey || !/\+\d+/.test(phoneKey)) { skipped++; return; }
+                    processed++;
+                    mappings.set(phoneKey, email);
+                });
+                let permissionDenied = false;
+                for (const [phoneKey, email] of mappings.entries()) {
+                    try {
+                        await setDoc(doc(db, 'login_index', phoneKey), { email });
+                        written++;
+                    } catch (e) {
+                        if (e && e.code === 'permission-denied') permissionDenied = true;
+                        errors++;
+                    }
+                }
+                const baseMsg = `已處理 ${processed} 筆，有效建立 ${written} 筆，略過 ${skipped} 筆，錯誤 ${errors} 筆。`;
+                alert(permissionDenied ? `${baseMsg}（權限不足，請確認 Firestore 規則與登入身分）` : baseMsg);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '建立手機對照索引'; }
             }
         }
 
@@ -2523,6 +2606,9 @@
                  if (confirm('確定要刪除此帳號嗎？(此操作僅刪除資料庫紀錄)')) {
                     await deleteDoc(doc(db, "users", e.target.dataset.id));
                 }
+            }
+            if (e.target.id === 'backfill-login-index-btn') {
+                await backfillLoginIndex();
             }
             
             // Schedule Modals & Actions

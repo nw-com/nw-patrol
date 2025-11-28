@@ -75,5 +75,13 @@ service cloud.firestore {
         (isChief() && scheduleCommunity(request.resource.data.scheduleId) == getUser(request.auth.uid).communityId) ||
         (isGuard() && scheduleCommunity(request.resource.data.scheduleId) in getUser(request.auth.uid).communityIds);
     }
+
+    // 手機登入索引：以手機號碼(E.164)對應電子郵件，僅供登入映射使用
+    match /login_index/{phone} {
+      // 允許公開讀取以支援未登入時的手機→Email 映射
+      allow read: if true;
+      // 僅管理層可維護映射資料
+      allow write: if isAdmin() || isExecutive();
+    }
   }
 }
