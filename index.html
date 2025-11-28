@@ -151,7 +151,7 @@
                             <h3 class="font-semibold text-lg mb-2">系統狀態</h3>
                             <div class="p-4 bg-white rounded-lg shadow-sm space-y-2">
                                 <p><strong>NFC 功能:</strong> <span id="nfc-status">檢測中...</span></p>
-                                <p><strong>Firebase 連線:</strong> <span id="firebase-status" class="text-gray-400">尚未連接</span></p>
+                                <p><strong>網路連線:</strong> <span id="firebase-status" class="text-gray-400">尚未連接</span></p>
                             </div>
                         </div>
                     </div>
@@ -706,7 +706,7 @@
         // 匯入 Firebase 模組
         import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where, getDocs, Timestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, updateDoc, deleteDoc, where, getDocs, Timestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref as storageRef, uploadBytes, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // --- Firebase 設定 ---
@@ -725,18 +725,69 @@
         try {
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
-            db = getFirestore(app);
+            db = initializeFirestore(app, { experimentalForceLongPolling: true, useFetchStreams: false });
             storage = getStorage(app);
             // 若部署在 GitHub Pages，預設啟用 Data URL 備援保存以避免未配置 CORS 前無法上傳
             window.FORCE_DATAURL_SAVE = (typeof location !== 'undefined' && /github\.io$/i.test(location.hostname));
+            // 預設關閉 Firestore 即時監聽（可於 Console 將 window.REALTIME_DISABLED = false 開啟）
+            if (typeof window !== 'undefined' && window.REALTIME_DISABLED === undefined) {
+                window.REALTIME_DISABLED = true;
+            }
             document.getElementById('firebase-status').textContent = '已連接';
             document.getElementById('firebase-status').className = 'text-green-600';
-        } catch(e) {
+        } catch (e) {
             console.error("Firebase 初始化失敗:", e);
             document.getElementById('firebase-status').textContent = '連接失敗';
             document.getElementById('firebase-status').className = 'text-red-600';
             alert("Firebase 初始化失敗，請檢查您的設定。");
         }
+
+        function onSnapshotWrap() {
+            if (typeof window !== 'undefined' && window.REALTIME_DISABLED) {
+                return () => {};
+            }
+            return onSnapshot.apply(null, arguments);
+        }
+
+        (function suppressPreviewErrors(){
+            try {
+                if (typeof window !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+                    const origError = console.error;
+                    console.error = function(){
+                        const msg = Array.from(arguments).map(a => (typeof a === 'string' ? a : '')).join(' ');
+                        if (msg.includes('google.firestore.v1.Firestore/Listen/channel')) return;
+                        return origError.apply(console, arguments);
+                    }
+                }
+            } catch(_){}
+        })();
+
+        function updateNetworkStatus(text, cls){
+            try {
+                const el = document.getElementById('firebase-status');
+                if (el) {
+                    el.textContent = text;
+                    el.className = cls || 'text-gray-400';
+                }
+            } catch(_){}
+        }
+        window.addEventListener('unhandledrejection', (e) => {
+            try {
+                const reason = e && e.reason ? (e.reason.message || String(e.reason)) : '';
+                const msg = String(reason).toLowerCase();
+                if (msg.includes('missing or insufficient permissions') || msg.includes('permission-denied')) {
+                    updateNetworkStatus('權限不足', 'text-red-600');
+                }
+            } catch(_){}
+        });
+        window.addEventListener('error', (e) => {
+            try {
+                const msg = String(e && e.message ? e.message : '').toLowerCase();
+                if (msg.includes('missing or insufficient permissions')) {
+                    updateNetworkStatus('權限不足', 'text-red-600');
+                }
+            } catch(_){}
+        });
 
 
         // --- 變數與 DOM 元素 ---
@@ -942,7 +993,7 @@
 
         const PAGE_PERMISSIONS = {
             'home': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF, ROLES.GUARD],
-            'patrol': [ROLES.CHIEF, ROLES.GUARD],
+            'patrol': [ROLES.ADMIN, ROLES.CHIEF, ROLES.GUARD],
             'data': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF, ROLES.GUARD],
             'schedule': [ROLES.ADMIN, ROLES.EXECUTIVE, ROLES.CHIEF],
             'settings': [ROLES.ADMIN]
@@ -1106,9 +1157,22 @@
         function closeModal(modal) { modal.classList.add('hidden'); }
         
         // Community Management
-        function listenForCommunities() {
+        async function listenForCommunities() {
             const q = query(collection(db, "communities"));
-            communitiesUnsubscribe = onSnapshot(
+            if (window.REALTIME_DISABLED) {
+                try {
+                    const snap = await getDocs(q);
+                    const communities = [];
+                    snap.forEach((doc) => communities.push({ id: doc.id, ...doc.data() }));
+                    renderCommunities(communities);
+                } catch (error) {
+                    if (communitiesList) {
+                        communitiesList.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-500">權限不足，無法載入社區列表</td></tr>`;
+                    }
+                }
+                return;
+            }
+            communitiesUnsubscribe = onSnapshotWrap(
                 q,
                 (querySnapshot) => {
                     const communities = [];
@@ -1116,7 +1180,6 @@
                     renderCommunities(communities);
                 },
                 (error) => {
-                    console.error('社區即時監聽失敗：', error);
                     if (communitiesList) {
                         communitiesList.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-500">權限不足，無法載入社區列表</td></tr>`;
                     }
@@ -1166,45 +1229,56 @@
         }
         
         // User Management
-        function listenForUsers() {
+        async function listenForUsers() {
             // 僅管理層訂閱整個 users；其他角色只訂閱自己的文件，避免觸發規則拒絕
             if (usersUnsubscribe) usersUnsubscribe();
             const role = userProfile?.role;
             try {
                 if (role === ROLES.ADMIN || role === ROLES.EXECUTIVE) {
                     const q = query(collection(db, "users"));
-                    usersUnsubscribe = onSnapshot(
-                        q,
-                        (querySnapshot) => {
-                            const users = [];
-                            querySnapshot.forEach((doc) => users.push({ id: doc.id, ...doc.data() }));
-                            renderUsers(users);
-                        },
-                        (error) => {
-                            console.error('使用者即時監聽失敗：', error);
-                            if (usersList) {
-                                usersList.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">權限不足，無法載入使用者列表</td></tr>`;
+                    if (window.REALTIME_DISABLED) {
+                        const snap = await getDocs(q);
+                        const users = [];
+                        snap.forEach((doc) => users.push({ id: doc.id, ...doc.data() }));
+                        renderUsers(users);
+                    } else {
+                        usersUnsubscribe = onSnapshotWrap(
+                            q,
+                            (querySnapshot) => {
+                                const users = [];
+                                querySnapshot.forEach((doc) => users.push({ id: doc.id, ...doc.data() }));
+                                renderUsers(users);
+                            },
+                            (error) => {
+                                if (usersList) {
+                                    usersList.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">權限不足，無法載入使用者列表</td></tr>`;
+                                }
                             }
-                        }
-                    );
+                        );
+                    }
                 } else if (currentUser) {
                     const ref = doc(db, "users", currentUser.uid);
-                    usersUnsubscribe = onSnapshot(
-                        ref,
-                        (docSnap) => {
-                            const users = docSnap.exists() ? [{ id: docSnap.id, ...docSnap.data() }] : [];
-                            renderUsers(users);
-                        },
-                        (error) => {
-                            console.error('使用者（本人的）監聽失敗：', error);
-                            if (usersList) {
-                                usersList.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">權限不足或未登入，無法載入個人資料</td></tr>`;
+                    if (window.REALTIME_DISABLED) {
+                        const docSnap = await getDoc(ref);
+                        const users = docSnap.exists() ? [{ id: docSnap.id, ...docSnap.data() }] : [];
+                        renderUsers(users);
+                    } else {
+                        usersUnsubscribe = onSnapshotWrap(
+                            ref,
+                            (docSnap) => {
+                                const users = docSnap.exists() ? [{ id: docSnap.id, ...docSnap.data() }] : [];
+                                renderUsers(users);
+                            },
+                            (error) => {
+                                if (usersList) {
+                                    usersList.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">權限不足或未登入，無法載入個人資料</td></tr>`;
+                                }
                             }
-                        }
-                    );
+                        );
+                    }
                 }
             } catch (error) {
-                console.error('初始化使用者監聽失敗：', error);
+                
             }
         }
         
@@ -1373,7 +1447,7 @@
             populateSelect(document.getElementById('filter-user'), staff);
         }
 
-        function listenForSchedules() {
+        async function listenForSchedules() {
             if (schedulesUnsubscribe) schedulesUnsubscribe();
             
             const communityFilter = document.getElementById('filter-community').value;
@@ -1408,7 +1482,20 @@
             }
             
             const q = query(collection(db, "schedules"), ...constraints);
-            schedulesUnsubscribe = onSnapshot(
+            if (window.REALTIME_DISABLED) {
+                try {
+                    const snap = await getDocs(q);
+                    const schedules = [];
+                    snap.forEach((doc) => schedules.push({ id: doc.id, ...doc.data() }));
+                    renderSchedules(schedules);
+                } catch (_) {
+                    if (schedulesList) {
+                        schedulesList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">權限不足，無法載入排程</td></tr>`;
+                    }
+                }
+                return;
+            }
+            schedulesUnsubscribe = onSnapshotWrap(
                 q,
                 (querySnapshot) => {
                     const schedules = [];
@@ -1416,7 +1503,6 @@
                     renderSchedules(schedules);
                 },
                 (error) => {
-                    console.error('排程即時監聽失敗：', error);
                     if (schedulesList) {
                         schedulesList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">權限不足，無法載入排程</td></tr>`;
                     }
@@ -1635,7 +1721,7 @@
             return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
         }
 
-        function buildCalendar(year, month) {
+        async function buildCalendar(year, month) {
             const label = document.getElementById('cal-month-label');
             label.textContent = `${year}年 ${month+1}月`;
             const daysContainer = document.getElementById('patrol-calendar-days');
@@ -1645,29 +1731,110 @@
             const startWeekday = firstDay.getDay();
             const daysInMonth = new Date(year, month+1, 0).getDate();
 
-            // 前置空白格（高度縮小 50%）
             for (let i=0; i<startWeekday; i++) {
                 const empty = document.createElement('div');
                 empty.className = 'h-5';
                 daysContainer.appendChild(empty);
             }
 
+            const statuses = await fetchMonthlyCalendarStatuses(year, month);
+
             for (let d=1; d<=daysInMonth; d++) {
                 const date = new Date(year, month, d);
                 const btn = document.createElement('button');
-                // 月曆日期按鈕高度縮小 50%
                 btn.className = 'h-5 rounded border text-xs hover:bg-gray-50';
                 btn.textContent = String(d);
+                const status = statuses[d] || 'none';
+                if (status === 'complete') btn.className += ' bg-green-100 border-green-300 text-green-700';
+                else if (status === 'partial') btn.className += ' bg-yellow-100 border-yellow-300 text-yellow-700';
+                else if (status === 'not_started') btn.className += ' bg-red-100 border-red-300 text-red-700';
+                else btn.className += ' bg-gray-200 border-gray-300 text-gray-600';
                 if (isSameDate(date, new Date())) {
-                    btn.className += ' bg-red-100 border-red-300 text-red-700 font-semibold';
+                    btn.classList.add('font-semibold','ring-2','ring-red-400');
                 }
                 btn.addEventListener('click', () => {
                     setSelectedDate(date);
-                    // 高亮選中日期
                     Array.from(daysContainer.querySelectorAll('button')).forEach(b => b.classList.remove('ring-2','ring-red-400'));
                     btn.classList.add('ring-2','ring-red-400');
                 });
                 daysContainer.appendChild(btn);
+            }
+        }
+
+        async function fetchMonthlyCalendarStatuses(year, month) {
+            const daysInMonth = new Date(year, month+1, 0).getDate();
+            const statuses = {};
+            for (let d=1; d<=daysInMonth; d++) statuses[d] = 'none';
+            if (!db) return statuses;
+            const serviceIds = Array.isArray(userProfile?.communityIds) ? [...userProfile.communityIds] : [];
+            if (userProfile?.role === ROLES.CHIEF && userProfile.communityId && !serviceIds.includes(userProfile.communityId)) {
+                serviceIds.push(userProfile.communityId);
+            }
+            if (!serviceIds.length) return statuses;
+            try {
+                const schedules = [];
+                const chunkSize = 10;
+                for (let i=0; i<serviceIds.length; i+=chunkSize) {
+                    const batch = serviceIds.slice(i, i+chunkSize);
+                    const q2 = query(collection(db, 'schedules'), where('communityId', 'in', batch));
+                    const snap = await getDocs(q2);
+                    snap.forEach(docSnap => schedules.push({ id: docSnap.id, ...docSnap.data() }));
+                }
+
+                const totalPointsBySchedule = {};
+                schedules.forEach(s => { totalPointsBySchedule[s.id] = Array.isArray(s.patrolPoints) ? s.patrolPoints.length : 0; });
+
+                const monthStart = new Date(year, month, 1, 0, 0, 0, 0);
+                const monthEnd = new Date(year, month+1, 0, 23, 59, 59, 999);
+                const scheduleIds = schedules.map(s => s.id);
+                const completedByDaySchedule = {};
+                for (let d=1; d<=daysInMonth; d++) completedByDaySchedule[d] = {};
+
+                for (let i=0; i<scheduleIds.length; i+=chunkSize) {
+                    const batchIds = scheduleIds.slice(i, i+chunkSize);
+                    if (!batchIds.length) continue;
+                    const qLogs = query(
+                        collection(db, 'patrol_logs'),
+                        where('scheduleId', 'in', batchIds),
+                        where('timestamp', '>=', Timestamp.fromDate(monthStart)),
+                        where('timestamp', '<=', Timestamp.fromDate(monthEnd))
+                    );
+                    const logsSnap = await getDocs(qLogs);
+                    logsSnap.forEach(docSnap => {
+                        const d = docSnap.data();
+                        const ts = d.timestamp && d.timestamp.toDate ? d.timestamp.toDate() : new Date(d.timestamp);
+                        const day = ts.getDate();
+                        const hasPhotos = (Array.isArray(d.photos) && d.photos.length > 0) || (Array.isArray(d.photoDetails) && d.photoDetails.length > 0) || (Array.isArray(d.photoDataUrls) && d.photoDataUrls.length > 0);
+                        if (!hasPhotos) return;
+                        const schedId = d.scheduleId;
+                        const pointId = d.patrolPointId;
+                        if (!completedByDaySchedule[day][schedId]) completedByDaySchedule[day][schedId] = new Set();
+                        completedByDaySchedule[day][schedId].add(pointId);
+                    });
+                }
+
+                for (let d=1; d<=daysInMonth; d++) {
+                    const dateObj = new Date(year, month, d);
+                    const dayIdx = dateObj.getDay();
+                    let total = 0;
+                    let done = 0;
+                    schedules.forEach(s => {
+                        const has = s.weeklyTimes && (s.weeklyTimes[dayIdx] !== undefined);
+                        if (!has) return;
+                        const t = totalPointsBySchedule[s.id] || 0;
+                        total += t;
+                        const set = completedByDaySchedule[d][s.id];
+                        if (set) done += Math.min(t, set.size);
+                    });
+                    if (total === 0) statuses[d] = 'none';
+                    else if (done === 0) statuses[d] = 'not_started';
+                    else if (done < total) statuses[d] = 'partial';
+                    else statuses[d] = 'complete';
+                }
+
+                return statuses;
+            } catch(_) {
+                return statuses;
             }
         }
 
@@ -3601,27 +3768,30 @@
 
         async function initializePatrolMap(task) {
             openModal(patrolMapModal);
-            patrolPointMarkers = {}; // Reset markers
+            patrolPointMarkers = {};
             patrolPointButtons = {};
+            const mapContainer = document.getElementById('patrol-map-container');
+            if (mapContainer) { mapContainer.style.display = 'none'; }
             const buttonsContainer = document.getElementById('patrol-point-buttons');
             if (buttonsContainer) {
                 buttonsContainer.innerHTML = '';
-                // 在窄螢幕中加大底部內距與背景不透明度，提升可見性
+                buttonsContainer.className = 'px-3 py-2 flex flex-col gap-2 overflow-y-auto';
+                buttonsContainer.style.position = 'relative';
+                buttonsContainer.style.bottom = 'auto';
+                buttonsContainer.style.zIndex = '1';
+                buttonsContainer.style.boxShadow = 'none';
+                buttonsContainer.style.background = 'transparent';
                 buttonsContainer.style.padding = '10px';
-                buttonsContainer.style.background = 'rgba(255,255,255,0.95)';
-                buttonsContainer.style.boxShadow = '0 -2px 8px rgba(0,0,0,0.08)';
-                buttonsContainer.style.zIndex = '6000';
             }
 
-            // 僅取「當日」巡邏紀錄，並使用即時監聽以確保地圖與按鈕狀態同步更新
             const now = new Date();
             const windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
             const windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
             const logsQuery = query(
-                collection(db, "patrol_logs"),
-                where("scheduleId", "==", task.id),
-                where("timestamp", ">=", Timestamp.fromDate(windowStart)),
-                where("timestamp", "<=", Timestamp.fromDate(windowEnd))
+                collection(db, 'patrol_logs'),
+                where('scheduleId', '==', task.id),
+                where('timestamp', '>=', Timestamp.fromDate(windowStart)),
+                where('timestamp', '<=', Timestamp.fromDate(windowEnd))
             );
             if (patrolLogsUnsubscribe) { try { patrolLogsUnsubscribe(); } catch(e){}; patrolLogsUnsubscribe = null; }
             const completedPointIds = new Set();
@@ -3629,128 +3799,92 @@
                 const points = task.patrolPoints || [];
                 points.forEach(point => {
                     const isCompleted = completedPointIds.has(point.internalId);
-                    updatePatrolMapMarker(point.internalId, isCompleted);
-                    const btn = patrolPointButtons[point.internalId];
-                    if (btn) {
-                        btn.dataset.completed = isCompleted ? 'true' : 'false';
-                        btn.classList.toggle('bg-green-100', !!isCompleted);
-                        btn.classList.toggle('text-green-800', !!isCompleted);
-                        btn.classList.toggle('bg-red-100', !isCompleted);
-                        btn.classList.toggle('text-red-800', !isCompleted);
+                    const row = patrolPointButtons[point.internalId];
+                    if (row) {
+                        row.dataset.completed = isCompleted ? 'true' : 'false';
+                        row.classList.toggle('border-green-300', !!isCompleted);
+                        row.classList.toggle('bg-green-50', !!isCompleted);
+                        row.classList.toggle('border-red-300', !isCompleted);
+                        row.classList.toggle('bg-red-50', !isCompleted);
                     }
                 });
             };
-            patrolLogsUnsubscribe = onSnapshot(
-                logsQuery,
-                (snap) => {
+            if (window.REALTIME_DISABLED) {
+                try {
+                    const snap = await getDocs(logsQuery);
                     completedPointIds.clear();
                     snap.forEach(docSnap => {
                         const d = docSnap.data();
-                        const hasPhotos = (Array.isArray(d.photos) && d.photos.length > 0)
-                            || (Array.isArray(d.photoDetails) && d.photoDetails.length > 0)
-                            || (Array.isArray(d.photoDataUrls) && d.photoDataUrls.length > 0);
+                        const hasPhotos = (Array.isArray(d.photos) && d.photos.length > 0) || (Array.isArray(d.photoDetails) && d.photoDetails.length > 0) || (Array.isArray(d.photoDataUrls) && d.photoDataUrls.length > 0);
                         if (d && d.patrolPointId && hasPhotos) completedPointIds.add(d.patrolPointId);
                     });
                     applyCompletedState();
-                },
-                (error) => {
-                    console.error('巡邏紀錄即時監聽失敗：', error);
-                    // 不阻斷 UI，持續顯示目前狀態，但停止即時更新
-                }
-            );
-
-            const redIcon = new L.Icon({
-                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
-            });
-
-            const greenIcon = new L.Icon({
-                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
-            });
-
-            if (!patrolMap) {
-                patrolMap = L.map('patrol-map-container');
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '© OpenStreetMap'
-                }).addTo(patrolMap);
+                } catch (_) {}
             } else {
-                Object.values(patrolPointMarkers).forEach(marker => patrolMap.removeLayer(marker));
+                patrolLogsUnsubscribe = onSnapshotWrap(
+                    logsQuery,
+                    (snap) => {
+                        completedPointIds.clear();
+                        snap.forEach(docSnap => {
+                            const d = docSnap.data();
+                            const hasPhotos = (Array.isArray(d.photos) && d.photos.length > 0) || (Array.isArray(d.photoDetails) && d.photoDetails.length > 0) || (Array.isArray(d.photoDataUrls) && d.photoDataUrls.length > 0);
+                            if (d && d.patrolPointId && hasPhotos) completedPointIds.add(d.patrolPointId);
+                        });
+                        applyCompletedState();
+                    },
+                    () => {}
+                );
             }
-            
+
             const points = task.patrolPoints || [];
             if (points.length === 0) {
-                alert('此巡邏任務尚未設定任何巡邏點。');
                 closeModal(patrolMapModal);
+                alert('此巡邏任務尚未設定任何巡邏點。');
                 return;
             }
 
-            const bounds = L.latLngBounds();
             points.forEach(point => {
-                const coords = point.location.split(',').map(Number);
-                if (coords.length === 2 && !isNaN(coords[0])) {
-                    const isCompleted = completedPointIds.has(point.internalId);
-                    const icon = isCompleted ? greenIcon : redIcon;
-
-                    const marker = L.marker(coords, { icon: icon }).addTo(patrolMap);
-                    marker.bindPopup(`<b>${point.name}</b><br>${point.code}`);
-                    if (!isCompleted) {
-                        marker.on('click', () => {
-                            document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
-                            nfcScanLog.innerHTML = '';
-                            openModal(nfcPointScanModal);
-                            startNFCScan(point);
-                        });
-                    }
-                    patrolPointMarkers[point.internalId] = marker;
-                    bounds.extend(coords);
-
-                    // 生成巡邏點列表按鈕
-                    if (buttonsContainer) {
-                        const btn = document.createElement('button');
-                        btn.className = `px-3 py-2 text-sm rounded border whitespace-nowrap ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
-                        btn.textContent = `${point.code} ${point.name}`;
-                        btn.style.flexShrink = '0';
-                        btn.dataset.pointId = point.internalId;
-                        btn.dataset.completed = isCompleted ? 'true' : 'false';
-                        btn.addEventListener('click', () => {
-                            patrolMap.setView(coords, Math.max(patrolMap.getZoom(), 18));
-                            marker.openPopup();
-                            // 依據最新狀態判斷是否開啟NFC掃描
-                            if (btn.dataset.completed !== 'true') {
-                                // 記錄目前選擇的巡邏點，供「改用QR掃碼」使用
-                                lastScanTargetPoint = point;
-                                document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
-                                nfcScanLog.innerHTML = '';
-                                openModal(nfcPointScanModal);
-                                startNFCScan(point);
-                            }
-                        });
-                        buttonsContainer.appendChild(btn);
-                        patrolPointButtons[point.internalId] = btn;
-                    }
+                const isCompleted = completedPointIds.has(point.internalId);
+                if (buttonsContainer) {
+                    const row = document.createElement('div');
+                    row.className = `flex items-center justify-between rounded border px-3 py-2 ${isCompleted ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`;
+                    row.dataset.pointId = point.internalId;
+                    row.dataset.completed = isCompleted ? 'true' : 'false';
+                    const left = document.createElement('div');
+                    left.className = 'flex items-center gap-2';
+                    const title = document.createElement('div');
+                    title.className = 'font-semibold text-sm';
+                    title.textContent = `${point.code} ${point.name}`;
+                    const status = document.createElement('span');
+                    status.className = `text-xs ${isCompleted ? 'text-green-700' : 'text-red-700'}`;
+                    status.textContent = isCompleted ? '已完成' : '未完成';
+                    left.appendChild(title);
+                    left.appendChild(status);
+                    const right = document.createElement('div');
+                    right.className = 'flex items-center gap-2';
+                    const nfcBtn = document.createElement('button');
+                    nfcBtn.className = 'px-2 py-1 text-xs rounded bg-blue-500 text-white';
+                    nfcBtn.textContent = 'NFC掃描';
+                    nfcBtn.addEventListener('click', () => {
+                        document.getElementById('nfc-scan-point-name').textContent = `掃描: ${point.name}`;
+                        nfcScanLog.innerHTML = '';
+                        openModal(nfcPointScanModal);
+                        startNFCScan(point);
+                    });
+                    const qrBtn = document.createElement('button');
+                    qrBtn.className = 'px-2 py-1 text-xs rounded bg-gray-800 text-white';
+                    qrBtn.textContent = 'QR掃碼';
+                    qrBtn.addEventListener('click', () => {
+                        startQRScan(point);
+                    });
+                    right.appendChild(nfcBtn);
+                    right.appendChild(qrBtn);
+                    row.appendChild(left);
+                    row.appendChild(right);
+                    buttonsContainer.appendChild(row);
+                    patrolPointButtons[point.internalId] = row;
                 }
             });
-
-            if (bounds.isValid()) {
-                // 先套用邊界，讓所有點可見
-                patrolMap.fitBounds(bounds, { padding: [20, 20], maxZoom: 18 });
-
-                // 依據邊界範圍自動提升縮放，避免點太擠
-                const sw = bounds.getSouthWest();
-                const ne = bounds.getNorthEast();
-                const diagonalMeters = sw.distanceTo(ne);
-                // 小範圍：加大縮放至 18；中範圍：至少 17
-                if (diagonalMeters < 1500) {
-                    patrolMap.setZoom(18);
-                } else if (diagonalMeters < 3000) {
-                    patrolMap.setZoom(Math.max(patrolMap.getZoom(), 17));
-                }
-            }
-            setTimeout(() => patrolMap.invalidateSize(), 100);
         }
 
         function updatePatrolMapMarker(pointId, isCompleted) {
