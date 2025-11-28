@@ -737,7 +737,7 @@
         try {
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
-            db = initializeFirestore(app, { experimentalForceLongPolling: true, useFetchStreams: false });
+            db = initializeFirestore(app, { experimentalForceLongPolling: false, useFetchStreams: true });
             storage = getStorage(app);
             // 若部署在 GitHub Pages，預設啟用 Data URL 備援保存以避免未配置 CORS 前無法上傳
             window.FORCE_DATAURL_SAVE = (typeof location !== 'undefined' && /github\.io$/i.test(location.hostname));
